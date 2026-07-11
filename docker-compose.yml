@@ -1,0 +1,9 @@
+services:
+  shopogs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: shopogs
+    ports:
+      - "8090:80"
+    restart: unless-stopped
