@@ -29,6 +29,9 @@ export function transformHhvListEntry(html: string, articleId: string): Availabi
     ["default", "sold_out", "temp_sold_out", "coming_soon", "not_enough_bonus_coins"].includes(c)
   );
 
+  // state ist bereits gegen eine feste Whitelist (.find(...includes(c))) oben
+  // eingegrenzt, kann also nur einer der bekannten Cart-States sein.
+  // eslint-disable-next-line security/detect-object-injection
   const status = state ? STATUS_BY_STATE[state] : undefined;
   if (!status) return null; // ausverkauft / nicht regulär kaufbar -> kein Treffer
 

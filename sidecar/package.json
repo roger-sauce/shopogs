@@ -1,0 +1,15 @@
+{
+  "name": "hhv-sidecar",
+  "private": true,
+  "version": "0.0.0",
+  "type": "commonjs",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "camoufox-js": "^0.11.1",
+    "playwright-core": "1.51.0"
+  }
+}

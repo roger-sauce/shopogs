@@ -1,6 +1,6 @@
 # How-To: neuen Plattenladen-Adapter hinzufügen
 
-Generisches Vorgehen, unabhängig vom konkreten Shop. Geschrieben nach dem Bau von 7 Adaptern (6 im Einsatz, 1 verworfen) für "Ich muss diese Platte haben" (`/Users/rogerhofmann/shopogs`). Wenn du (Claude) dieses Dokument bekommst: lies zuerst `RECON.md` und `HANDOFF.md` im selben Projekt für den aktuellen Stand, dann folge unten stehendem Ablauf für den neuen Shop.
+Generisches Vorgehen, unabhängig vom konkreten Shop. Geschrieben nach dem Bau von 7 Adaptern (6 im Einsatz, 1 verworfen) für "Ich muss diese Platte haben" (`/Users/rogerhofmann/dev-workspace/shopogs`). Wenn du (Claude) dieses Dokument bekommst: lies zuerst `RECON.md` und `HANDOFF.md` im selben Projekt für den aktuellen Stand, dann folge unten stehendem Ablauf für den neuen Shop.
 
 ## Grundregel: Recon vor Code
 

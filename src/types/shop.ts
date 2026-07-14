@@ -5,6 +5,17 @@ export type SelectableFormat = Exclude<Format, "All">;
 export type ShopGroup = "pickup-berlin" | "mail-order";
 
 /**
+ * fast – normale HTTP-Suche (nginx-Proxy mit Header-Spoofing), Ergebnis
+ *        typischerweise in < 1s.
+ * slow – jede Suche navigiert live durch einen Camoufox-Browser (siehe
+ *        sidecar/), weil der Shop-Bot-Schutz sich nicht mit einfachen
+ *        HTTP-Requests umgehen lässt (z.B. HHV: Cookie ist an den
+ *        TLS-Fingerprint der Verbindung gebunden, die ihn geholt hat).
+ *        Deutlich langsamer (Browser-Start + Challenge lösen).
+ */
+export type ShopSpeed = "fast" | "slow";
+
+/**
  * Alle Status, die ein Treffer haben kann, WENN er überhaupt bestellbar ist.
  * Ausverkaufte/nicht verfügbare Formate werden von den Adaptern gar nicht
  * erst als Treffer zurückgegeben (siehe checkAvailability) — es gibt also
@@ -43,6 +54,8 @@ export interface ShopAdapter {
   country: string;
   /** "pickup-berlin" für die 4 Berliner Läden, "mail-order" für den Rest */
   group: ShopGroup;
+  /** "fast" (normale HTTP-Suche) oder "slow" (volle Camoufox-Browser-Navigation pro Suche) */
+  speed: ShopSpeed;
   /** Homepage-URL, u.a. Fallback-Link falls ein Treffer keine eigene URL hat */
   homeUrl: string;
   /** Pfad zu einem Logo unter /public/logos/ (optional, solange keins vorliegt) */

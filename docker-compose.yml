@@ -7,3 +7,22 @@ services:
     ports:
       - "8090:80"
     restart: unless-stopped
+    depends_on:
+      - browser-sidecar
+    networks:
+      - default
+      - shared-proxy-net
+
+  browser-sidecar:
+    build:
+      context: ./sidecar
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    container_name: browser-sidecar
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+
+networks:
+  shared-proxy-net:
+    external: true

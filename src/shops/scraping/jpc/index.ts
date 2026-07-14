@@ -12,6 +12,7 @@ const jpc: ShopAdapter = {
   logoUrl:
     "https://upload.wikimedia.org/wikipedia/commons/5/5a/Jpc-schallplatten_Versandhandelsgesellschaft_mbH_Logo.svg",
   type: "scraping",
+  speed: "fast",
   async checkAvailability(artist, title) {
     const query = [artist, title].filter(Boolean).join(" ").trim();
     if (!query) return [];

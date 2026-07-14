@@ -1,6 +1,6 @@
 # Recon: Plattenladen-Verfügbarkeits-Checker
 
-Stand: 2026-07-10
+Stand: 2026-07-11
 
 Ziel: Für jeden Shop klären, wie sich Verfügbarkeit von Vinyl/CD/Tape/Download programmatisch abfragen lässt — ohne Login, möglichst ohne JS-Rendering, um Adapter im Stil von Konzert-Guide (`src/stations/{official-api,unofficial-api,scraping}/<shop>/{api.ts,index.ts,transform.ts}`) zu bauen.
 
@@ -44,10 +44,11 @@ Eskalationsweg pro Shop: (1) Sandbox-curl → (2) curl vom eigenen Mac → (3) C
 
 ## Zusätzliche Shops (International)
 
-### Boomkat — boomkat.com — **entfernt aus der Shop-Liste**
+### Boomkat — boomkat.com — **entfernt aus der Shop-Liste, Revival geplant**
 - **Backend:** Spree Commerce (Rails).
 - **Suche:** `GET /api/autocomplete?query=<titel>` liefert Artist-/Release-Treffer mit URL-Slug.
 - Blockt Requests über den Vite-Dev-Proxy zuverlässig mit HTTP 403, auch mit vollständigem Browser-Header-Set (User-Agent, Accept-Language, sec-fetch-*, sec-ch-ua). Ein direkter Vergleich zeigt: ein echter Chrome-Request geht anstandslos durch (200), der Proxy-Request wird geblockt — spricht für TLS-/Bot-Fingerprinting (z.B. Cloudflare), das ein simpler Node-Reverse-Proxy grundsätzlich nicht imitieren kann. Ohne echten (Headless-)Browser server-seitig nicht lösbar → Shop bewusst aus der App entfernt.
+- **Update (2026-07-11):** User möchte Boomkat wieder einbauen, sobald die für HHV geplante Playwright-Session-Relay-Lösung (siehe eigener Abschnitt unten) steht — ein echter Chromium-Prozess hat einen echten Browser-TLS-Stack, sollte also auch dieses Fingerprinting-Problem lösen (gleicher Fix-Mechanismus wie bei HHVs Cookie-Challenge, nur anderes Blockade-Verfahren beim Shop). Alte, unregistrierte Adapter-Dateien liegen noch unter `src/shops/scraping/boomkat/` (aus der Sandbox nicht löschbar, Permission-Fehler) — beim Wiederaufbau vermutlich einfach überschreiben/neu aufsetzen.
 
 ### SoundOhm — soundohm.com
 - **Backend:** Custom, mit öffentlicher JSON-API.
@@ -114,6 +115,26 @@ Mapping pro Shop:
 | Soufflé Continu | `totalStock` + `lastCopy` | `totalStock>0`, `lastCopy:false` | – | – | `totalStock<=0` (→ `last_copy` wenn `lastCopy:true`) |
 | JPC | `.availability`-Text | enthält "am Lager" | – | alle "lieferbar innerhalb..."-Varianten | kein echter "nicht verfügbar"-Zustand in der Suche |
 
+## Docker-Setup (lokales Testen)
+
+Analog zum Konzert-Guide-Ansatz gebaut, siehe `Dockerfile`, `nginx.conf`, `docker-compose.yml`, `.dockerignore`. Multi-Stage-Build (Node baut die Vite-App, `nginx:alpine` served `dist/` + reicht `/proxy/<shop>/`-Pfade an die echten Shop-Domains weiter — das Äquivalent zu Vites Dev-Proxy, der außerhalb von `npm run dev` nicht existiert). Start: `docker compose up --build`, App dann unter `http://localhost:8090`.
+
+**Wichtige Lektion aus dem ersten Docker-Test:** `nginx.conf` brauchte zusätzlich zu User-Agent/Referer/Accept-Language noch die Sec-Fetch-*/sec-ch-ua*-Header UND eine explizite Leerung des `Origin`-Headers (der Browser schickt bei einem Fetch auf `localhost:8090` automatisch `Origin: http://localhost:8090` mit, was für die Shops wie eine fremde Seite aussieht — Vite unterdrückt das per `removeHeader("origin")`, nginx tat es bis dahin nicht). Beides jetzt für alle Shops in `nginx.conf` nachgezogen. Ein einmaliger `HTTP 502` bei Bis Aufs Messer im ersten Test war einmalig/transient, kein Config-Fehler.
+
+## Playwright Session-Relay für HHV (und geplant: Boomkat) — Design, noch NICHT gebaut
+
+Ausgangslage: HHV verlangt seit dem Docker-Testing (2026-07-11) einen gültigen Session-Cookie, den nur ein echter Browser durch Lösen einer JS-Challenge bekommt (siehe HHV-Abschnitt oben). Boomkat blockt strukturell ähnlich (TLS-/Bot-Fingerprinting, siehe eigener Abschnitt). Beides ist mit reinem Header-Spoofing über nginx/Vite nicht lösbar.
+
+**Vereinbartes Design (2026-07-11), Kernpunkte:**
+- Ein zweiter Docker-Container (Node + Playwright, passt zum bereits in Konzert-Guide verwendeten Playwright-Stack) übernimmt NUR HHV und Boomkat. Die anderen 5 Shops bleiben unverändert direkt bei nginx.
+- **Lazy/on-demand statt periodisch:** Da die App selten genutzt wird ("Luxus-Spielerei für Kumpels"), kein Hintergrund-Scheduler. Der Sidecar hält einen In-Memory-Cache (Cookie-Wert + Ablaufzeitpunkt) pro Shop. Erste Suchanfrage einer Session ohne (noch) gültigen Cookie → Playwright startet einmalig, navigiert echt zur Shop-Seite, löst die Challenge ab, liest den Cookie aus, cached ihn (z.B. 1–2h Gültigkeit, muss sich in der Praxis noch zeigen), fährt Chromium wieder runter. Folge-Requests nutzen den gecachten Cookie ganz normal per HTTP, ohne erneut Chromium zu starten. Läuft der Cache ab, wird beim nächsten Request automatisch neu geholt (reaktiv, kein fester Zeitplan).
+- Architektonisch übernimmt der Sidecar die Rolle, die aktuell `nginx.conf`s `/proxy/hhv/`-Block spielt (künftig auch `/proxy/boomkat/`) — nginx leitet diese zwei Pfade an den neuen Container weiter statt direkt an die Shop-Domain.
+- **Containerzahl bewusst bei 2 gehalten:** shopogs-Container (nginx: App + die 5 "einfachen" Shop-Proxys) + Playwright-Sidecar. Kein dritter Container.
+- **Konzert-Guides `nginx-proxy-manager` (NPM) bewusst NICHT wiederverwendet** für die Shop-Proxy-Logik: NPM macht bei Konzert-Guide reines Domain-/TLS-Routing zwischen mehreren Projekten, kein Shop-spezifisches Header-Spoofing/Pfad-Rewriting — das soll weiterhin versioniert in `nginx.conf` im Repo liegen, nicht in NPMs Admin-UI/SQLite-DB verstreut. NPM käme höchstens später als zusätzliche Tür VOR den shopogs-nginx-Container, falls die App mal über localhost hinaus erreichbar sein soll (analog zu Konzert-Guide intern/extern) — für lokales Testen unnötig.
+- Playwright-Erkennung als Risiko: falls HHV/Boomkat anfangen, Headless-Chromium selbst zu erkennen, ist das ein Wettrüsten ohne Enddatum — bewusst in Kauf genommen, da beide Shops dem User wichtig sind.
+
+**Nächste Schritte (für den Chat morgen):** Sidecar-Grundgerüst bauen (kleiner Node/Express-Service mit Playwright), Cookie-Harvesting für HHV implementieren und verifizieren (Ziel: `/proxy/hhv/records/katalog/filter/...` liefert über den Sidecar echten Content statt Challenge-Seite), danach optional Boomkat nach demselben Muster wieder aufnehmen, `nginx.conf` + `docker-compose.yml` entsprechend erweitern, `shops/index.ts` ggf. Boomkat wieder registrieren.
+
 ## UI-Anforderungen (Notiz für Frontend)
 
 - Eingabefelder: **Artist/Band** und **Album-Titel** (getrennte Felder).
@@ -121,7 +142,8 @@ Mapping pro Shop:
 
 ## Offene Punkte / Nächste Schritte
 
+- **Sofort nächster Schritt:** Playwright-Session-Relay-Sidecar für HHV bauen (Design siehe eigener Abschnitt oben), danach Boomkat nach demselben Muster wieder aufnehmen.
 - Soufflé Continu: verifizieren, wie explizit ausverkaufte Titel markiert sind (Badge-Text, oder komplett ausgeblendet).
 - HHV: Facet-Hash-Encoding (`D2N2S11` etc.) ggf. weiter reverse-engineeren, falls Format-Filter direkt in der URL statt clientseitig gebraucht wird.
 - Rate-Limiting / robots.txt / ToS pro Shop noch nicht geprüft — vor Produktivbetrieb sinnvoll gegenzuchecken.
-- Adapter-Grundgerüst nach Konzert-Guide-Schema aufsetzen (`StationAdapter`-Äquivalent, `fetchAvailability(artist, title, format?)`).
+- Alte, unregistrierte Ordner `src/shops/scraping/boomkat/` (wird beim Wiederaufbau vermutlich überschrieben) und `src/shops/scraping/soufflecontinu/` (Dead Code, durch `unofficial-api/soufflecontinu/` ersetzt) liegen noch auf der Platte — aus der Sandbox nicht löschbar (Permission-Fehler), können vom User bei Gelegenheit selbst entfernt werden.

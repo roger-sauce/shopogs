@@ -16,5 +16,8 @@ export function matchesQueryWords(candidate: string | undefined, query: string):
   if (!candidate) return false;
   const words = query.trim().split(/\s+/).filter(Boolean);
   if (words.length === 0) return true;
+  // w ist vor dem Einbau in die RegExp bereits per escapeRegExp() escaped --
+  // kein Regex-Injection-Risiko, auch wenn `query` aus Nutzereingaben stammt.
+  // eslint-disable-next-line security/detect-non-literal-regexp
   return words.every((w) => new RegExp(`\\b${escapeRegExp(w)}\\b`, "iu").test(candidate));
 }

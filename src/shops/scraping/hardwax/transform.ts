@@ -27,7 +27,16 @@ import type { AvailabilityResult } from "../../../types/shop";
 //   - title-Attribut: `add "<Titel>" (<Format>) to your order` — bei
 //     Einzeltrack-Downloads steht hier der Track-Titel (z.B. "... Part 1"),
 //     nicht der Release-Titel.
-const BUY_BUTTON_RE = /^(.+?)\s*€\s*([\d]+(?:[.,]\d+)?)$/;
+// Ziffern-Wiederholungen bewusst auf {1,6}/{1,2} begrenzt (statt [\d]+) --
+// keine reale ReDoS-Lücke: (.+?) ist nicht-gierig und läuft gegen einen
+// festen Literal-Anker (€), das ist linear, kein verschachteltes/mehrdeutiges
+// Backtracking wie bei klassischen catastrophic-backtracking-Mustern
+// ((a+)+ o.ä.). Die security/detect-unsafe-regex-Heuristik zählt aber
+// schlicht Quantifier-Konstrukte, unabhängig davon -- bei so kurzen, festen
+// Button-Texten (z.B. `12" € 12`) bewusst unterdrückt statt den Regex weiter
+// zu verbiegen.
+// eslint-disable-next-line security/detect-unsafe-regex
+const BUY_BUTTON_RE = /^(.+?)\s*€\s*(\d{1,6}(?:[.,]\d{1,2})?)$/;
 const BUY_BUTTON_TITLE_RE = /^add\s+[“"](.+)[”"]\s*\(/;
 
 export function transformHardWax(html: string): AvailabilityResult[] {

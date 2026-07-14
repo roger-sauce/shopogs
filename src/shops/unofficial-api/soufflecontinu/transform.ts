@@ -3,7 +3,13 @@ import type { SouffleContinuArticle, SouffleContinuSearchResponse } from "./api"
 
 function extractPrice(priceHtml: string): string | undefined {
   // priceHtml sieht z.B. so aus: '<span class="articlePrice">28.90€</span> '
-  const match = priceHtml.match(/([\d]+(?:[.,]\d+)?)\s*€/);
+  // Ziffern-Wiederholungen bewusst auf {1,6}/{1,2} begrenzt (statt [\d]+) --
+  // keine reale ReDoS-Lücke bei so kurzen Preis-Strings (kein verschachteltes/
+  // mehrdeutiges Backtracking). Die security/detect-unsafe-regex-Heuristik
+  // zählt aber weiterhin die Quantifier-Konstrukte insgesamt -- bewusst
+  // unterdrückt statt den Regex weiter zu verbiegen.
+  // eslint-disable-next-line security/detect-unsafe-regex
+  const match = priceHtml.match(/(\d{1,6}(?:[.,]\d{1,2})?)\s*€/);
   return match ? match[1] : undefined;
 }
 

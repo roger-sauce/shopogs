@@ -35,3 +35,17 @@ export async function fetchHhvListEntry(articleId: string): Promise<string> {
   if (!res.ok) throw new Error(`HHV list_entry ${articleId}: HTTP ${res.status}`);
   return res.text();
 }
+
+// Meldet dem Sidecar, dass diese Suche abgeschlossen ist -- schließt die
+// offene Camoufox-Session sofort, statt bis zum Idle-Timeout zu warten
+// (siehe sidecar/src/browserSession.js). Wird von checkAvailability() immer
+// per finally aufgerufen, auch bei Fehlern. Absichtlich robust: ein
+// fehlgeschlagener Close-Call darf die eigentliche Suche nicht zum Absturz
+// bringen, der Sidecar räumt notfalls per Idle-Timeout selbst auf.
+export async function closeHhvSession(): Promise<void> {
+  try {
+    await fetch(`${PROXY_BASE}/__session/close`, { method: "POST" });
+  } catch (err) {
+    console.warn("[hhv] Session-Close fehlgeschlagen:", err);
+  }
+}
