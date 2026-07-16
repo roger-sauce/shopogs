@@ -12,7 +12,17 @@ FROM mcr.microsoft.com/playwright:v1.61.1-jammy
 
 WORKDIR /app
 COPY package*.json ./
-RUN npm install --omit=dev
+# npm ci statt npm install: nutzt ausschließlich package-lock.json, installiert
+# also exakt die geprüften, gesperrten Versionen -- kein "zieht sich beim
+# nächsten Build automatisch die neueste camoufox-js-Version" mehr. Genau das
+# hat uns hier den Bruch eingebrockt: ein --no-cache-Rebuild zog camoufox-js
+# 0.11.2 (statt der bis dahin exakt gleich gebliebenen 0.11.1), dessen neuer
+# Fingerprint-Generator eine "audio:seed"-Property setzt, die unser bewusst
+# gepinntes altes Camoufox-Browser-Binary (v135.0.1-beta.24, siehe
+# install-camoufox.js) nicht kennt -- jede Session-Erstellung (HHV + Boomkat)
+# crashte seitdem mit "UnknownProperty: Unknown property audio:seed in
+# config". package-lock.json fehlte bis jetzt komplett in diesem Ordner.
+RUN npm ci --omit=dev
 # Fester Installationspfad statt automatisch ermitteltem Home-Cache-Verzeichnis
 # (~/.cache/camoufox) -- die Runtime-Fehlermeldung "not installed at
 # /root/.cache/camoufox" trotz erfolgreichem 78s-Download beim Build deutet

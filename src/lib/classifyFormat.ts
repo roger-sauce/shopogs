@@ -13,10 +13,18 @@ export function classifyFormat(rawFormat: string | undefined): SelectableFormat 
 
   if (/mp3|wav|flac|aiff|download|digital/.test(f)) return "Download";
   if (/cassette|tape|\bmc\b/.test(f)) return "Cassette";
-  // \bcds?\b statt \bcd\b: manche Shops liefern Mengenangaben wie "3 CDs"
-  // (verifiziert bei JPC) — ohne das "s?" matcht \bcd\b das nicht, weil kein
-  // Wortende zwischen "d" und "s" liegt.
-  if (/\bcds?\b/.test(f)) return "CD";
+  // (?<![a-z])cds?\b statt \bcds?\b: manche Shops liefern Mengenangaben wie
+  // "3 CDs" (verifiziert bei JPC) — ohne das "s?" matcht \bcd\b das nicht,
+  // weil kein Wortende zwischen "d" und "s" liegt.
+  // Bugfix: Box-Sets wie "9CD Box" (verifiziert bei SoundOhm, Merzbow "Nine
+  // Studies...") wurden trotzdem nie als CD erkannt -- \b ist eine
+  // Wort-/Nicht-Wort-Grenze, Ziffern zählen aber selbst als Wortzeichen, also
+  // gibt es zwischen "9" und "c" in "9cd" GAR KEINE \b-Grenze, das führende
+  // \b in \bcds?\b schlug also grundsätzlich fehl, sobald direkt eine Zahl
+  // vor "CD" stand. Negative Lookbehind statt \b vorne: verbietet nur ein
+  // unmittelbar vorangehendes a-z (schützt weiter vor Fehltreffern wie
+  // "recorded"), erlaubt aber Ziffern/Satzanfang direkt davor.
+  if (/(?<![a-z])cds?\b/.test(f)) return "CD";
   if (/lp|"|vinyl|12"|10"|7"|ep\b/.test(f)) return "Vinyl";
 
   return undefined;
