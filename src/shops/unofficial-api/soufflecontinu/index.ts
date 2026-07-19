@@ -1,7 +1,19 @@
-import type { ShopAdapter } from "../../../types/shop";
-import { searchSouffleContinu } from "./api";
-import { transformSouffleContinu } from "./transform";
+import type { ShopAdapter, LabelSearchResult } from "../../../types/shop";
+import {
+  searchSouffleContinu,
+  fetchSouffleContinuLabelsIndex,
+  fetchSouffleContinuLabelArticleCount,
+} from "./api";
+import { transformSouffleContinu, findSouffleContinuLabelEntry } from "./transform";
 import { matchesQueryWords } from "../../../lib/relevance";
+
+// Ziffern-Labels laufen in der alphabetischen Übersicht unter dem
+// Buchstaben "0" (verifiziert per Recon), alles andere unter seinem ersten
+// Buchstaben.
+function souffleContinuIndexLetter(label: string): string {
+  const first = label.trim().charAt(0).toLowerCase();
+  return /[0-9]/.test(first) ? "0" : first;
+}
 
 const souffleContinu: ShopAdapter = {
   id: "souffle-continu",
@@ -50,6 +62,29 @@ const souffleContinu: ShopAdapter = {
     // Treffer, nie gegen das Artist-Feld selbst. Jetzt explizit dagegen
     // filtern.
     return rawResults.filter((r) => r.artist && matchesQueryWords(r.artist, artistNeedle));
+  },
+  async checkLabelAvailability(label): Promise<LabelSearchResult> {
+    const needle = label.trim();
+    if (!needle) return { supported: true, count: 0, url: "https://www.soufflecontinu.com" };
+
+    const letter = souffleContinuIndexLetter(needle);
+    const indexUrl = `https://www.soufflecontinu.com/labels/${letter}/`;
+    const indexHtml = await fetchSouffleContinuLabelsIndex(letter);
+    const entry = findSouffleContinuLabelEntry(indexHtml, needle);
+
+    if (!entry) {
+      // Label auf dieser Buchstaben-Seite nicht gelistet -- führt dieses
+      // Label nicht, aber die Suche selbst wird unterstützt (siehe
+      // LabelSearchResult-Doku: count 0 + Fallback-URL auf die
+      // Übersichtsseite, keine 404-Detailseite).
+      return { supported: true, count: 0, url: indexUrl };
+    }
+
+    const labelUrl = entry.href.startsWith("http")
+      ? entry.href
+      : `https://www.soufflecontinu.com${entry.href.startsWith("/") ? "" : "/"}${entry.href}`;
+    const count = await fetchSouffleContinuLabelArticleCount(entry.id);
+    return { supported: true, count, url: labelUrl };
   },
 };
 

@@ -1,12 +1,17 @@
-import type { ShopAdapter, AvailabilityResult } from "../../../types/shop";
+import type { ShopAdapter, AvailabilityResult, LabelSearchResult } from "../../../types/shop";
 import {
   autocompleteBoomkat,
   fetchBoomkatProductPage,
   fetchBoomkatArtistPage,
+  fetchBoomkatLabelPage,
   slugifyArtist,
   closeBoomkatSession,
 } from "./api";
-import { transformBoomkatProductPage, parseBoomkatArtistPage } from "./transform";
+import {
+  transformBoomkatProductPage,
+  parseBoomkatArtistPage,
+  countBoomkatLabelProducts,
+} from "./transform";
 import { matchesQueryWords } from "../../../lib/relevance";
 
 interface ReleaseMatch {
@@ -91,6 +96,23 @@ const boomkat: ShopAdapter = {
       );
 
       return results.flat() as AvailabilityResult[];
+    } finally {
+      await closeBoomkatSession();
+    }
+  },
+  async checkLabelAvailability(label): Promise<LabelSearchResult> {
+    // Wie bei checkAvailability: jede Suche baut im Sidecar eine eigene
+    // Camoufox-Session auf, die danach unbedingt wieder geschlossen werden
+    // muss.
+    try {
+      const needle = label.trim();
+      if (!needle) return { supported: true, count: 0, url: "https://boomkat.com" };
+
+      const slug = slugifyArtist(needle);
+      const url = `https://boomkat.com/labels/${slug}`;
+      const html = await fetchBoomkatLabelPage(slug);
+      const count = countBoomkatLabelProducts(html);
+      return { supported: true, count, url };
     } finally {
       await closeBoomkatSession();
     }

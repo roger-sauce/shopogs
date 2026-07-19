@@ -102,3 +102,13 @@ export function transformHardWax(html: string): AvailabilityResult[] {
 
   return results;
 }
+
+// Zählt die Treffer auf einer Label-Seite (/label/<slug>/). Verifiziert per
+// Recon: Treffer stecken wie in der normalen Suche in <article>-Elementen;
+// ein nicht existierendes/leeres Label zeigt stattdessen den Text
+// "No results." an.
+export function countHardWaxLabelArticles(html: string): number {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  if (/No results\./i.test(doc.body?.textContent ?? "")) return 0;
+  return doc.querySelectorAll("article").length;
+}

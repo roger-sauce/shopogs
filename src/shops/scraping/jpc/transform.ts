@@ -73,3 +73,11 @@ export function transformJpc(html: string): AvailabilityResult[] {
 
   return results;
 }
+
+// Liest die Trefferanzahl aus der Label-gefilterten Suchseite. Verifiziert
+// per Recon: die Seite zeigt oberhalb der Ergebnisse wörtlich
+// "Ihre Suche ergab <N> Treffer" an, auch wenn N = 0 ist.
+export function extractJpcLabelCount(html: string): number {
+  const match = html.match(/Ihre Suche ergab\s*(\d+)/i);
+  return match ? parseInt(match[1], 10) : 0;
+}

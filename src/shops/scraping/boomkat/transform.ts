@@ -103,3 +103,16 @@ export function parseBoomkatArtistPage(html: string): BoomkatArtistPageEntry[] {
     ];
   });
 }
+
+// Zählt die eindeutigen Produkt-Links auf einer Label-Übersichtsseite
+// (/labels/<slug>). Auf href statt li.product_item gezählt, weil ein
+// Release theoretisch mehrfach im Grid auftauchen könnte (z.B. Vinyl +
+// Digital als getrennte Kacheln) -- ein Set auf den Produkt-Pfad dedupliziert
+// das zu einer Release-Anzahl.
+export function countBoomkatLabelProducts(html: string): number {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const hrefs = Array.from(doc.querySelectorAll('a[href*="/products/"]'))
+    .map((a) => a.getAttribute("href"))
+    .filter((href): href is string => Boolean(href));
+  return new Set(hrefs).size;
+}

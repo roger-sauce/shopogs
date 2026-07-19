@@ -1,7 +1,9 @@
-import type { ShopAdapter } from "../../../types/shop";
-import { searchSoundOhm } from "./api";
-import { transformSoundOhm } from "./transform";
+import type { ShopAdapter, LabelSearchResult } from "../../../types/shop";
+import { searchSoundOhm, fetchSoundOhmLabelPage } from "./api";
+import { transformSoundOhm, countSoundOhmLabelProducts } from "./transform";
 import { matchesQueryWords } from "../../../lib/relevance";
+
+const SOUNDOHM_HOME_URL = "https://www.soundohm.com";
 
 const soundohm: ShopAdapter = {
   id: "soundohm",
@@ -60,6 +62,27 @@ const soundohm: ShopAdapter = {
     // Mountain" von Hamid Drake/Pat Thomas — "Sees" stand nur im Titel).
     // Deshalb hier explizit gegen das ARTIST-Feld filtern, nicht den Titel.
     return rawResults.filter((r) => r.artist && matchesQueryWords(r.artist, artistNeedle));
+  },
+  async checkLabelAvailability(label): Promise<LabelSearchResult> {
+    const needle = label.trim();
+    if (!needle) return { supported: true, count: 0, url: SOUNDOHM_HOME_URL };
+
+    const raw = await searchSoundOhm(needle);
+    const products = raw.result?.products ?? [];
+    const matchingLabel = products
+      .flatMap((p) => p.label_info ?? [])
+      .find((l) => l.name.trim().toLowerCase() === needle.toLowerCase());
+
+    if (!matchingLabel) {
+      // Kein Produkt mit passendem Label-Namen gefunden -- SoundOhm bietet
+      // (anders als ANOST) keine alphabetische Label-Übersichtsseite als
+      // sinnvollen Fallback-Link, daher Fallback auf die Homepage.
+      return { supported: true, count: 0, url: SOUNDOHM_HOME_URL };
+    }
+
+    const html = await fetchSoundOhmLabelPage(matchingLabel.slug);
+    const count = countSoundOhmLabelProducts(html);
+    return { supported: true, count, url: `https://www.soundohm.com/label/${matchingLabel.slug}` };
   },
 };
 

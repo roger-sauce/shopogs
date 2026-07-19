@@ -17,6 +17,10 @@ const PROXY_BASE = "/proxy/hhv";
 const DEFAULT_FACET = "D2N2S11";
 const MAX_ARTICLES = 20; // Begrenzung, um nicht zu viele Einzel-Requests zu feuern
 
+// Für die Label-Suche ("Small Label Suche" in der UI) wiederverwendet, damit
+// die Such-URL an genau einer Stelle gepflegt wird.
+export const HHV_SEARCH_FACET = DEFAULT_FACET;
+
 export async function searchHhvArticleIds(query: string): Promise<string[]> {
   const url = `${PROXY_BASE}/records/katalog/filter/suche-${DEFAULT_FACET}?term=${encodeURIComponent(
     query
@@ -33,6 +37,29 @@ export async function fetchHhvListEntry(articleId: string): Promise<string> {
     headers: { Accept: "text/html" },
   });
   if (!res.ok) throw new Error(`HHV list_entry ${articleId}: HTTP ${res.status}`);
+  return res.text();
+}
+
+// Für die Label-Suche: dieselbe Katalog-Suchseite wie searchHhvArticleIds,
+// aber als rohes HTML zurückgegeben, weil hier (anders als bei der
+// Artist/Titel-Suche) nicht die einzelnen Artikel-IDs interessieren, sondern
+// ein evtl. vorhandener Label-Filter-Link mit data-title/data-path (siehe
+// transform.ts).
+export async function fetchHhvSearchPage(term: string): Promise<string> {
+  const url = `${PROXY_BASE}/records/katalog/filter/suche-${DEFAULT_FACET}?term=${encodeURIComponent(
+    term
+  )}`;
+  const res = await fetch(url, { headers: { Accept: "text/html" } });
+  if (!res.ok) throw new Error(`HHV search page: HTTP ${res.status}`);
+  return res.text();
+}
+
+// Lädt eine beliebige, bereits von HHV gelieferte relative Pfad-URL (z.B.
+// einen data-path-Wert aus der Suchseite) über den gleichen Proxy/Sidecar.
+export async function fetchHhvPath(path: string): Promise<string> {
+  const p = path.startsWith("/") ? path : `/${path}`;
+  const res = await fetch(`${PROXY_BASE}${p}`, { headers: { Accept: "text/html" } });
+  if (!res.ok) throw new Error(`HHV path ${path}: HTTP ${res.status}`);
   return res.text();
 }
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { shops } from "./shops";
 import type {
   AvailabilityResult,
+  LabelSearchResult,
   SelectableFormat,
   ShopAdapter,
   ShopGroup,
@@ -40,6 +41,18 @@ interface ShopResult {
   shop: ShopAdapter;
   status: "loading" | "done" | "error";
   results: AvailabilityResult[];
+  error?: string;
+}
+
+// Ergebniszeile der "Small Label Suche" -- anders als ShopResult oben trägt
+// hier jeder Eintrag KEINE Trefferliste, sondern nur die Anzahl + einen
+// Absprunglink (siehe LabelSearchResult) bzw. "nicht unterstützt", wenn der
+// Shop-Adapter kein checkLabelAvailability implementiert (z.B. Bis Aufs
+// Messer).
+interface LabelShopResult {
+  shop: ShopAdapter;
+  status: "loading" | "done" | "error";
+  result?: LabelSearchResult;
   error?: string;
 }
 
@@ -86,7 +99,6 @@ export default function App() {
 
   const [searchingFast, setSearchingFast] = useState(false);
   const [searchingSlow, setSearchingSlow] = useState(false);
-  const searching = searchingFast || searchingSlow;
   const [searched, setSearched] = useState(false);
   const [shopResults, setShopResults] = useState<ShopResult[]>([]);
 
@@ -99,20 +111,48 @@ export default function App() {
   const [suggestions, setSuggestions] = useState<TitleSuggestion[]>([]);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
 
+  // "Small Label Suche" -- eigener Modus, der die Artist/Band-Felder als
+  // Label-Eingabe umwidmet (Album-Titel wird dabei unsichtbar). Nutzt
+  // bewusst dieselben artistFast/artistSlow-States wie die normale Suche
+  // (inkl. der bestehenden Fast->Slow-Sync) statt eigener Felder -- exakt
+  // das, was "Aktivieren dieser Checkbox ändert die Eingabefelder" meint.
+  const [smallLabelMode, setSmallLabelMode] = useState(false);
+  const [labelSearched, setLabelSearched] = useState(false);
+  const [labelResults, setLabelResults] = useState<LabelShopResult[]>([]);
+  // Wie bei der normalen Suche: getrennt pro Zeile, damit beide Go-Buttons
+  // unabhängig ihren eigenen "schon gesucht?"-Zustand tracken (siehe
+  // GoState) -- Label-Suche ist NICHT mehr ein einzelner Klick für alle
+  // Shops, sondern wie die Album-Suche zwei getrennte Klicks (Fast-Shops /
+  // Slow-Shops).
+  const [lastLabelSearchedFastQuery, setLastLabelSearchedFastQuery] = useState<string | null>(null);
+  const [lastLabelSearchedSlowQuery, setLastLabelSearchedSlowQuery] = useState<string | null>(null);
+
+  const searching = searchingFast || searchingSlow;
+
   const hasQueryFast = !!(artistFast.trim() || titleFast.trim());
   const hasQuerySlow = !!(artistSlow.trim() || titleSlow.trim());
-  const fastReady = hasQueryFast && selectedFormats.length > 0;
-  const slowReady = hasQuerySlow && selectedFormats.length > 0;
+  // Format-Filter ist für die Label-Suche irrelevant (LabelSearchResult hat
+  // gar kein Format-Feld) -- dort reicht eine reine Eingabe.
+  const fastReady = smallLabelMode ? hasQueryFast : hasQueryFast && selectedFormats.length > 0;
+  const slowReady = smallLabelMode ? hasQuerySlow : hasQuerySlow && selectedFormats.length > 0;
   const canSearchFast = fastReady && !searchingFast;
   const canSearchSlow = slowReady && !searchingSlow;
 
   const fastGoState: GoState = !fastReady
     ? "disabled"
+    : smallLabelMode
+    ? lastLabelSearchedFastQuery === artistFast.trim()
+      ? "done"
+      : "ready"
     : lastSearchedFastQuery === queryKey(artistFast, titleFast)
     ? "done"
     : "ready";
   const slowGoState: GoState = !slowReady
     ? "disabled"
+    : smallLabelMode
+    ? lastLabelSearchedSlowQuery === artistSlow.trim()
+      ? "done"
+      : "ready"
     : lastSearchedSlowQuery === queryKey(artistSlow, titleSlow)
     ? "done"
     : "ready";
@@ -122,7 +162,10 @@ export default function App() {
   // statt die Seite komplett zu verlassen (was ohne eigenen History-Eintrag
   // sonst passiert, da die App selbst keine URL-Änderungen vornimmt).
   useEffect(() => {
-    const onPopState = () => setSearched(false);
+    const onPopState = () => {
+      setSearched(false);
+      setLabelSearched(false);
+    };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
@@ -151,6 +194,18 @@ export default function App() {
 
   const toggleFormat = (f: SelectableFormat) => {
     setSelectedFormats((prev) => (prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f]));
+  };
+
+  // Umschalten zwischen normaler Suche und "Small Label Suche" leert bewusst
+  // Artist/Band bzw. Small Label -- sonst bleibt z.B. ein zuvor eingetippter
+  // Artist-Name im (jetzt umbenannten) Feld stehen und wird versehentlich
+  // als Label-Name mitgesucht (musste vorher manuell gelöscht werden). Title
+  // wird ebenfalls geleert (auch wenn im Label-Modus ohnehin unsichtbar) --
+  // titleSlow/artistSlow folgen automatisch über die bestehende Sync-Effekte.
+  const toggleSmallLabelMode = () => {
+    setSmallLabelMode((v) => !v);
+    setArtistFast("");
+    setTitleFast("");
   };
 
   const applySuggestion = (s: TitleSuggestion) => {
@@ -183,6 +238,10 @@ export default function App() {
     setSearched(false);
     setLastSearchedFastQuery(null);
     setLastSearchedSlowQuery(null);
+    setLabelResults([]);
+    setLabelSearched(false);
+    setLastLabelSearchedFastQuery(null);
+    setLastLabelSearchedSlowQuery(null);
   };
 
   // Eigener, bewusst separater Button statt automatisch bei der Suche
@@ -191,11 +250,46 @@ export default function App() {
   // entstand). Kein Trick nötig, um den Fokus zu behalten — hier IST das
   // Ziel, in den neuen Tab zu wechseln. Nutzt die schnelle Zeile, da die
   // meist zuerst ausgefüllt wird.
+  //
+  // In der "Small Label Suche" trägt artistFast den Label-Namen (Titel ist
+  // dort ohnehin leer/unsichtbar) -- per Live-Recon verifiziert, dass beide
+  // Seiten dafür einen eigenen Label-Filter anbieten: Discogs' "type=label"
+  // filtert exakt auf Labels (verifiziert: "Balmat" -> genau 1 Treffer,
+  // "Blume" -> 84 Fuzzy-Treffer mit dem echten Label ganz oben). Bandcamp
+  // hat keinen reinen "nur Labels"-Filter, "item_type=b" ("artists & labels")
+  // ist die nächstliegende Kategorie und zeigt exakte Label-Treffer ebenfalls
+  // ganz oben (verifiziert mit "Balmat" und "Blume").
   const openDiscogs = () => {
-    if (!hasQueryFast) return;
-    const query = [artistFast, titleFast].map((v) => v.trim()).filter(Boolean).join(" ");
+    const query = smallLabelMode
+      ? artistFast.trim()
+      : [artistFast, titleFast].map((v) => v.trim()).filter(Boolean).join(" ");
+    if (!query) return;
     window.open(
-      `https://www.discogs.com/search/?q=${encodeURIComponent(query)}&type=release`,
+      `https://www.discogs.com/search/?q=${encodeURIComponent(query)}&type=${
+        smallLabelMode ? "label" : "release"
+      }`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  };
+
+  // Wie openDiscogs, nur Bandcamps eigene Suche statt Discogs -- Bandcamps
+  // Suche ist deutlich fuzzy-toleranter als Discogs (kombinierte
+  // Artist+Titel-Anfrage liefert live verifiziert direkt die richtigen
+  // Treffer oben, auch bei mehrteiligen Box-Sets), deshalb hier kein Hinweis
+  // auf "Titel sollte vollständig sein" nötig. item_type=a filtert auf
+  // "albums" (Bandcamps eigener Tab-Filter, per Recon in Chrome verifiziert)
+  // -- blendet sonst mitgelistete Einzeltrack-Treffer aus, die für einen
+  // Plattenladen-Check nicht relevant sind.
+  const openBandcamp = () => {
+    const query = smallLabelMode
+      ? artistFast.trim()
+      : [artistFast, titleFast].map((v) => v.trim()).filter(Boolean).join(" ");
+    if (!query) return;
+    window.open(
+      `https://bandcamp.com/search?q=${encodeURIComponent(query)}&item_type=${
+        smallLabelMode ? "b" : "a"
+      }`,
       "_blank",
       "noopener,noreferrer"
     );
@@ -257,14 +351,90 @@ export default function App() {
     }
   };
 
+  // Label-Suche ("Small Label Suche") -- wie runSearch oben nach
+  // Geschwindigkeitsklasse aufgeteilt: zwei getrennte Klicks (Fast-Shops /
+  // Slow-Shops), exakt dasselbe Muster wie bei der normalen Album-Suche.
+  // Beide Zeilen schreiben in dasselbe flache labelResults-Array (siehe
+  // LabelResultsList), das ergibt in Summe trotzdem die "alle Shops"-Liste,
+  // sobald beide Zeilen einmal gesucht haben.
+  const runLabelSearch = async (speed: ShopSpeed, labelVal: string) => {
+    const query = labelVal.trim();
+    if (!query) return;
+
+    const targets = shops.filter((s) => s.speed === speed);
+    if (targets.length === 0) return;
+
+    if (!labelSearched) {
+      window.history.pushState({ view: "results" }, "");
+    }
+    setLabelSearched(true);
+    if (speed === "fast") setSearchingFast(true);
+    else setSearchingSlow(true);
+
+    setLabelResults((prev) => {
+      // Gleiche Logik wie bei runSearch: eine neue "Schnell"-Suche macht die
+      // zuletzt gezeigten "Nicht ganz so Schnell"-Ergebnisse potenziell
+      // ungültig (Eingabe wurde per Sync auch unten übernommen), daher
+      // werden sie mit entfernt. Umgekehrt nicht.
+      const keepOthers = speed === "fast" ? [] : prev.filter((r) => r.shop.speed !== speed);
+      return [...keepOthers, ...targets.map((shop) => ({ shop, status: "loading" as const }))];
+    });
+    if (speed === "fast") setLastLabelSearchedSlowQuery(null);
+
+    await Promise.all(
+      targets.map(async (shop) => {
+        if (!shop.checkLabelAvailability) {
+          // Kein Label-Suche-Adapter vorhanden (z.B. Bis Aufs Messer) --
+          // wird explizit als "nicht unterstützt" geführt, kein Fehler.
+          setLabelResults((prev) =>
+            prev.map((r) =>
+              r.shop.id === shop.id ? { ...r, status: "done" as const, result: { supported: false } } : r
+            )
+          );
+          return;
+        }
+        try {
+          const result = await shop.checkLabelAvailability(query);
+          setLabelResults((prev) =>
+            prev.map((r) => (r.shop.id === shop.id ? { ...r, status: "done" as const, result } : r))
+          );
+        } catch (err) {
+          setLabelResults((prev) =>
+            prev.map((r) =>
+              r.shop.id === shop.id
+                ? { ...r, status: "error" as const, error: (err as Error).message }
+                : r
+            )
+          );
+        }
+      })
+    );
+
+    if (speed === "fast") {
+      setSearchingFast(false);
+      setLastLabelSearchedFastQuery(query);
+    } else {
+      setSearchingSlow(false);
+      setLastLabelSearchedSlowQuery(query);
+    }
+  };
+
   const handleSearchFast = () => {
     if (!canSearchFast) return;
+    if (smallLabelMode) {
+      runLabelSearch("fast", artistFast);
+      return;
+    }
     setSuggestionsOpen(false);
     runSearch("fast", artistFast, titleFast);
   };
 
   const handleSearchSlow = () => {
     if (!canSearchSlow) return;
+    if (smallLabelMode) {
+      runLabelSearch("slow", artistSlow);
+      return;
+    }
     runSearch("slow", artistSlow, titleSlow);
   };
 
@@ -326,67 +496,76 @@ export default function App() {
             <div style={{ fontSize: 10, letterSpacing: 3, color: "#c8a96e", textTransform: "uppercase", marginBottom: 10 }}>
               {SPEED_LABELS.fast}
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 16, alignItems: "end" }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: smallLabelMode ? "1fr auto" : "1fr 1fr auto",
+                gap: 16,
+                alignItems: "end",
+              }}
+            >
               <div>
-                <div style={fieldLabelStyle}>Artist / Band</div>
+                <div style={fieldLabelStyle}>{smallLabelMode ? "Small Label" : "Artist / Band"}</div>
                 <input
                   value={artistFast}
                   onChange={(e) => setArtistFast(sanitizeSearchTerm(e.target.value))}
                   onKeyDown={(e) => e.key === "Enter" && handleSearchFast()}
-                  placeholder="z.B. Aphex Twin"
+                  placeholder={smallLabelMode ? "z.B. Balmat" : "z.B. Aphex Twin"}
                   style={inputStyle}
                 />
               </div>
-              <div style={{ position: "relative" }}>
-                <div style={fieldLabelStyle}>Album-Titel</div>
-                <input
-                  value={titleFast}
-                  onChange={(e) => setTitleFast(sanitizeSearchTerm(e.target.value))}
-                  onFocus={() => setSuggestionsOpen(true)}
-                  onBlur={() => setTimeout(() => setSuggestionsOpen(false), 150)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSearchFast()}
-                  placeholder="z.B. Ambient Works"
-                  style={inputStyle}
-                />
-                {suggestionsOpen && suggestions.length > 0 && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "100%",
-                      left: 0,
-                      right: 0,
-                      marginTop: 4,
-                      background: "#0d0f14",
-                      border: "1px solid #2a2d35",
-                      borderRadius: 2,
-                      zIndex: 10,
-                      maxHeight: 220,
-                      overflowY: "auto",
-                    }}
-                  >
-                    <div style={{ fontSize: 10, letterSpacing: 2, color: "#6b6e78", textTransform: "uppercase", padding: "8px 12px 4px" }}>
-                      Vollständiger Titel gefunden
-                    </div>
-                    {suggestions.map((s, i) => (
-                      <div
-                        key={i}
-                        onMouseDown={() => applySuggestion(s)}
-                        style={{
-                          padding: "8px 12px",
-                          cursor: "pointer",
-                          fontSize: 13,
-                          color: "#e8e4d9",
-                          borderTop: "1px solid #1e2128",
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "#171a22")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                      >
-                        {s.artist ? `${s.artist} – ${s.title}` : s.title}
+              {!smallLabelMode && (
+                <div style={{ position: "relative" }}>
+                  <div style={fieldLabelStyle}>Album-Titel</div>
+                  <input
+                    value={titleFast}
+                    onChange={(e) => setTitleFast(sanitizeSearchTerm(e.target.value))}
+                    onFocus={() => setSuggestionsOpen(true)}
+                    onBlur={() => setTimeout(() => setSuggestionsOpen(false), 150)}
+                    onKeyDown={(e) => e.key === "Enter" && handleSearchFast()}
+                    placeholder="z.B. Ambient Works"
+                    style={inputStyle}
+                  />
+                  {suggestionsOpen && suggestions.length > 0 && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "100%",
+                        left: 0,
+                        right: 0,
+                        marginTop: 4,
+                        background: "#0d0f14",
+                        border: "1px solid #2a2d35",
+                        borderRadius: 2,
+                        zIndex: 10,
+                        maxHeight: 220,
+                        overflowY: "auto",
+                      }}
+                    >
+                      <div style={{ fontSize: 10, letterSpacing: 2, color: "#6b6e78", textTransform: "uppercase", padding: "8px 12px 4px" }}>
+                        Vollständiger Titel gefunden
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                      {suggestions.map((s, i) => (
+                        <div
+                          key={i}
+                          onMouseDown={() => applySuggestion(s)}
+                          style={{
+                            padding: "8px 12px",
+                            cursor: "pointer",
+                            fontSize: 13,
+                            color: "#e8e4d9",
+                            borderTop: "1px solid #1e2128",
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = "#171a22")}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                        >
+                          {s.artist ? `${s.artist} – ${s.title}` : s.title}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               <button onClick={handleSearchFast} disabled={!canSearchFast} style={goButtonStyle(fastGoState)}>
                 {searchingFast ? "…" : "Go"}
               </button>
@@ -398,82 +577,130 @@ export default function App() {
             <div style={{ fontSize: 10, letterSpacing: 3, color: "#c8a96e", textTransform: "uppercase", marginBottom: 10 }}>
               {SPEED_LABELS.slow}
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 16, alignItems: "end" }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: smallLabelMode ? "1fr auto" : "1fr 1fr auto",
+                gap: 16,
+                alignItems: "end",
+              }}
+            >
               <div>
-                <div style={fieldLabelStyle}>Artist / Band</div>
+                <div style={fieldLabelStyle}>{smallLabelMode ? "Small Label" : "Artist / Band"}</div>
                 <input
                   value={artistSlow}
                   onChange={(e) => setArtistSlow(sanitizeSearchTerm(e.target.value))}
                   onKeyDown={(e) => e.key === "Enter" && handleSearchSlow()}
-                  placeholder="z.B. Aphex Twin"
+                  placeholder={smallLabelMode ? "z.B. Balmat" : "z.B. Aphex Twin"}
                   style={inputStyle}
                 />
               </div>
-              <div>
-                <div style={fieldLabelStyle}>Album-Titel</div>
-                <input
-                  value={titleSlow}
-                  onChange={(e) => setTitleSlow(sanitizeSearchTerm(e.target.value))}
-                  onKeyDown={(e) => e.key === "Enter" && handleSearchSlow()}
-                  placeholder="z.B. Ambient Works"
-                  style={inputStyle}
-                />
-              </div>
+              {!smallLabelMode && (
+                <div>
+                  <div style={fieldLabelStyle}>Album-Titel</div>
+                  <input
+                    value={titleSlow}
+                    onChange={(e) => setTitleSlow(sanitizeSearchTerm(e.target.value))}
+                    onKeyDown={(e) => e.key === "Enter" && handleSearchSlow()}
+                    placeholder="z.B. Ambient Works"
+                    style={inputStyle}
+                  />
+                </div>
+              )}
               <button onClick={handleSearchSlow} disabled={!canSearchSlow} style={goButtonStyle(slowGoState)}>
                 {searchingSlow ? "…" : "Go"}
               </button>
             </div>
           </div>
 
-          {/* Format-Filter + Discogs-Sprungmarke -- gemeinsam für beide
-              Zeilen, da rein clientseitige Nachfilterung bzw. externer Link. */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 16, alignItems: "start" }}>
+          {/* Format-Filter + Small-Label-Suche-Checkbox + Bandcamp/Discogs-
+              Sprungmarken in einer Zeile. Nur der Format-Filter ist für die
+              Label-Suche irrelevant (kein Format-Feld) und wird im
+              aktivierten Modus ausgeblendet -- Bandcamp/Discogs bleiben
+              sichtbar, weil beide auch eine Label-Suche unterstützen (siehe
+              openBandcamp/openDiscogs). Die Checkbox selbst bleibt ebenfalls
+              IMMER sichtbar, sonst könnte man den Modus nicht wieder
+              verlassen. */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: smallLabelMode ? "auto auto" : "1fr auto auto",
+              gap: 32,
+              alignItems: "start",
+            }}
+          >
+            {!smallLabelMode && (
+              <div>
+                <div style={{ fontSize: 10, letterSpacing: 3, color: "#6b6e78", textTransform: "uppercase", marginBottom: 10 }}>
+                  Format
+                </div>
+                <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                  {SELECTABLE_FORMATS.map((f) => (
+                    <label key={f} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#9099a8", cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedFormats.includes(f)}
+                        onChange={() => toggleFormat(f)}
+                        style={{ accentColor: "#c8a96e" }}
+                      />
+                      {f}
+                    </label>
+                  ))}
+                </div>
+                {selectedFormats.length === 0 && (
+                  <div style={{ fontSize: 12, color: "#c8a96e", marginTop: 8 }}>
+                    Kein Format ausgewählt — das wird keine Ergebnisse liefern.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* "Small Label Suche" -- eigene Spalte mit etwas Abstand neben
+                dem Format-Filter, statt darunter, damit auf den ersten Blick
+                klar ist: das ist kein weiteres Format, sondern ein
+                eigenständiger Such-Modus (siehe smallLabelMode). */}
             <div>
               <div style={{ fontSize: 10, letterSpacing: 3, color: "#6b6e78", textTransform: "uppercase", marginBottom: 10 }}>
-                Format
+                Small Label Suche
               </div>
-              <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                {SELECTABLE_FORMATS.map((f) => (
-                  <label key={f} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#9099a8", cursor: "pointer" }}>
-                    <input
-                      type="checkbox"
-                      checked={selectedFormats.includes(f)}
-                      onChange={() => toggleFormat(f)}
-                      style={{ accentColor: "#c8a96e" }}
-                    />
-                    {f}
-                  </label>
-                ))}
-              </div>
-              {selectedFormats.length === 0 && (
-                <div style={{ fontSize: 12, color: "#c8a96e", marginTop: 8 }}>
-                  Kein Format ausgewählt — das wird keine Ergebnisse liefern.
+              <input
+                type="checkbox"
+                checked={smallLabelMode}
+                onChange={toggleSmallLabelMode}
+                style={{ accentColor: "#c8a96e" }}
+              />
+              {smallLabelMode && (
+                <div style={{ fontSize: 11, color: "#6b6e78", marginTop: 8, maxWidth: 220 }}>
+                  Zeigt für alle Shops die Trefferanzahl eines Labels plus Absprunglink -- statt
+                  einzelner Platten.
                 </div>
               )}
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
-              <button
-                onClick={openDiscogs}
-                disabled={!hasQueryFast}
-                title="Album-Titel sollte vollständig sein"
-                style={{
-                  background: hasQueryFast ? "#4a4d55" : "#1e2128",
-                  border: "none",
-                  color: hasQueryFast ? "#d8dae0" : "#6b6e78",
-                  padding: "9px 14px",
-                  fontSize: 10,
-                  letterSpacing: 1.5,
-                  textTransform: "uppercase",
-                  cursor: hasQueryFast ? "pointer" : "not-allowed",
-                  borderRadius: 1,
-                  fontFamily: "inherit",
-                }}
-              >
-                go to discogs
-              </button>
-              <div style={{ fontSize: 11, color: "#6b6e78", marginTop: 8, textAlign: "right" }}>
-                Discogs: Album-Titel sollte vollständig sein
+              {/* Eigene innere Spalte, linksbündig -- so richtet sich die
+                  Hinweiszeile am linken Rand des Button-Blocks aus (= linker
+                  Rand des Bandcamp-Buttons), während der ganze Block als
+                  Einheit weiterhin rechts sitzt. */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button onClick={openBandcamp} disabled={!hasQueryFast} style={externalLinkButtonStyle(hasQueryFast)}>
+                    go to bandcamp
+                  </button>
+                  <button
+                    onClick={openDiscogs}
+                    disabled={!hasQueryFast}
+                    title={smallLabelMode ? undefined : "Album-Titel sollte vollständig sein"}
+                    style={externalLinkButtonStyle(hasQueryFast)}
+                  >
+                    go to discogs
+                  </button>
+                </div>
+                <div style={{ fontSize: 11, color: "#6b6e78", marginTop: 8, textAlign: "left", maxWidth: 220 }}>
+                  {smallLabelMode
+                    ? "Bandcamp / Discogs: Suche nach Label statt Album"
+                    : "Bandcamp / Discogs: Album-Titel sollte vollständig sein"}
+                </div>
               </div>
             </div>
           </div>
@@ -482,7 +709,7 @@ export default function App() {
         {/* "Neue Suche" bewusst UNTER dem Formular statt oben im Header --
             oben verschwand der Link beim Scrollen durch eine lange
             Ergebnisliste aus dem sichtbaren Bereich. */}
-        {(hasQueryFast || hasQuerySlow || searched) && (
+        {(hasQueryFast || hasQuerySlow || searched || labelSearched) && (
           <div style={{ textAlign: "right", padding: "18px 0 8px" }}>
             <button
               onClick={resetSearch}
@@ -507,7 +734,17 @@ export default function App() {
         <div style={{ height: 14 }} />
 
         {/* Ergebnisse */}
-        {searched && (
+        {smallLabelMode ? (
+          labelSearched && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 36 }}>
+              <LabelResultsList results={labelResults} />
+              <div style={{ borderTop: "1px solid #1e2128", paddingTop: 32, marginTop: 8 }}>
+                <ShopShowcase />
+              </div>
+            </div>
+          )
+        ) : (
+        searched && (
           <div style={{ display: "flex", flexDirection: "column", gap: 36 }}>
             {(["pickup-berlin", "mail-order"] as ShopGroup[]).map((group) => {
               const visible = visibleByGroup(group);
@@ -600,13 +837,18 @@ export default function App() {
               <ShopShowcase />
             </div>
           </div>
+        )
         )}
 
-        {!searched && (
+        {(smallLabelMode ? !labelSearched : !searched) && (
           <div style={{ padding: "24px 0 60px" }}>
             <ShopShowcase />
             <div style={{ textAlign: "center", padding: "48px 0 0", color: "#3a3d45" }}>
-              <div style={{ fontSize: 14, letterSpacing: 1 }}>Artist/Band und Album-Titel eingeben und Verfügbarkeit prüfen</div>
+              <div style={{ fontSize: 14, letterSpacing: 1 }}>
+                {smallLabelMode
+                  ? "Small Label eingeben und Verfügbarkeit über alle Shops prüfen"
+                  : "Artist/Band und Album-Titel eingeben und Verfügbarkeit prüfen"}
+              </div>
             </div>
           </div>
         )}
@@ -672,6 +914,74 @@ function LogoBadge({ shop, size = 32 }: { shop: ShopAdapter; size?: number }) {
       }}
     >
       {initials}
+    </div>
+  );
+}
+
+// Ergebnisliste der "Small Label Suche" -- bewusst anders aufgebaut als die
+// normale Trefferliste (visibleByGroup): keine Gruppierung nach
+// pickup-berlin/mail-order, keine Formatspalte, kein Ausblenden leerer
+// Shops. Stattdessen IMMER alle Shops in einer flachen, alphabetisch
+// sortierten Liste -- jeder Eintrag zeigt entweder eine anklickbare
+// Trefferanzahl (Absprung zur Shop-eigenen Seite) oder "nicht unterstützt"
+// (z.B. Bis Aufs Messer, das gar kein checkLabelAvailability implementiert).
+function LabelResultsList({ results }: { results: LabelShopResult[] }) {
+  if (results.length === 0) return null;
+
+  const sorted = [...results].sort((a, b) => a.shop.name.localeCompare(b.shop.name, "de"));
+
+  return (
+    <div>
+      <div style={{ fontSize: 11, letterSpacing: 3, color: "#6b6e78", textTransform: "uppercase", marginBottom: 14 }}>
+        Label-Suche -- alle Shops
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {sorted.map(({ shop, status, result, error }) => (
+          <div
+            key={shop.id}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr auto",
+              alignItems: "center",
+              gap: 12,
+              padding: "14px 20px",
+              background: "#0f1118",
+              border: "1px solid #1e2128",
+              borderRadius: 2,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <LogoBadge shop={shop} size={28} />
+              <span style={{ fontSize: 16, color: "#f0ece0" }}>{shop.name}</span>
+              <span style={{ fontSize: 11, color: "#6b6e78" }}>{shop.country}</span>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              {status === "loading" && <span style={{ fontSize: 13, color: "#6b6e78" }}>…</span>}
+              {status === "error" && (
+                <span style={{ fontSize: 12, color: "#c87070" }}>Fehler: {error}</span>
+              )}
+              {status === "done" && result && !result.supported && (
+                <span style={{ fontSize: 13, color: "#6b6e78", letterSpacing: 0.5 }}>nicht unterstützt</span>
+              )}
+              {status === "done" && result && result.supported && (
+                <a
+                  href={result.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    fontSize: 15,
+                    color: "#c8a96e",
+                    textDecoration: "none",
+                    borderBottom: "1px dotted #c8a96e",
+                  }}
+                >
+                  {result.count} Treffer
+                </a>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -742,6 +1052,24 @@ const fieldLabelStyle: React.CSSProperties = {
   textTransform: "uppercase",
   marginBottom: 8,
 };
+
+// Gemeinsamer Style für "Go to Bandcamp"/"Go to Discogs" -- beide Buttons
+// verhalten sich identisch (aktiv/inaktiv je nach hasQueryFast), nur das
+// Ziel unterscheidet sich.
+function externalLinkButtonStyle(enabled: boolean): React.CSSProperties {
+  return {
+    background: enabled ? "#4a4d55" : "#1e2128",
+    border: "none",
+    color: enabled ? "#d8dae0" : "#6b6e78",
+    padding: "9px 14px",
+    fontSize: 10,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    cursor: enabled ? "pointer" : "not-allowed",
+    borderRadius: 1,
+    fontFamily: "inherit",
+  };
+}
 
 function goButtonStyle(state: GoState): React.CSSProperties {
   const byState: Record<GoState, { background: string; color: string; cursor: string }> = {

@@ -30,3 +30,35 @@ export function transformSouffleContinu(
       status: a.lastCopy ? ("last_copy" as const) : ("in_stock" as const),
     }));
 }
+
+export interface SouffleContinuLabelEntry {
+  /** Numerische Label-ID aus der href, z.B. "4249" bei "/label/4249-blume/" -- wird für fetchSouffleContinuLabelArticleCount gebraucht (siehe api.ts). */
+  id: string;
+  /** href der Label-Detailseite, wie im Markup vorgefunden (kann absolut oder relativ sein). */
+  href: string;
+}
+
+// Sucht in der alphabetischen Label-Übersichtsseite den Link, dessen Text
+// exakt dem gesuchten Label-Namen entspricht (case-insensitive), und gibt
+// dessen href + numerische ID zurück. null, wenn das Label auf dieser
+// Buchstaben-Seite nicht gelistet ist, oder die href nicht dem erwarteten
+// "/label/<id>-<slug>/"-Muster entspricht.
+export function findSouffleContinuLabelEntry(html: string, label: string): SouffleContinuLabelEntry | null {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const needle = label.trim().toLowerCase();
+  const links = Array.from(doc.querySelectorAll('a[href*="/label/"]'));
+
+  for (const link of links) {
+    const text = link.textContent?.trim().toLowerCase() ?? "";
+    if (text !== needle) continue;
+
+    const href = link.getAttribute("href");
+    if (!href) continue;
+    const idMatch = href.match(/\/label\/(\d+)-/);
+    if (!idMatch) continue;
+
+    return { id: idMatch[1], href };
+  }
+
+  return null;
+}

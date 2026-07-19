@@ -1,6 +1,6 @@
-import type { ShopAdapter } from "../../../types/shop";
-import { fetchHardWaxSearch } from "./api";
-import { transformHardWax } from "./transform";
+import type { ShopAdapter, LabelSearchResult } from "../../../types/shop";
+import { fetchHardWaxSearch, fetchHardWaxLabelPage, slugifyHardWaxLabel } from "./api";
+import { transformHardWax, countHardWaxLabelArticles } from "./transform";
 import { matchesQueryWords } from "../../../lib/relevance";
 
 const hardWax: ShopAdapter = {
@@ -25,6 +25,16 @@ const hardWax: ShopAdapter = {
     // "Sees" lieferte Treffer ganz ohne "Sees" in Artist/Titel). Gleicher
     // Wortgrenzen-Filter wie bei JPC/HHV/Boomkat.
     return results.filter((r) => matchesQueryWords(`${r.artist ?? ""} ${r.title}`, query));
+  },
+  async checkLabelAvailability(label): Promise<LabelSearchResult> {
+    const needle = label.trim();
+    if (!needle) return { supported: true, count: 0, url: "https://hardwax.com" };
+
+    const slug = slugifyHardWaxLabel(needle);
+    const url = `https://hardwax.com/label/${slug}/`;
+    const html = await fetchHardWaxLabelPage(slug);
+    const count = countHardWaxLabelArticles(html);
+    return { supported: true, count, url };
   },
 };
 

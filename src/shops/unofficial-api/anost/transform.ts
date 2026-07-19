@@ -27,3 +27,27 @@ export function transformAnost(raw: AnostSearchResponse): AvailabilityResult[] {
       }));
   });
 }
+
+// Sucht in der /labels-Übersichtsseite den Link, dessen Text exakt
+// "<Label> [<Anzahl>]" entspricht (case-insensitive, verifiziert per Recon
+// z.B. "Balmat [8]"). Gibt null zurück, wenn kein Label mit exakt diesem
+// Namen gelistet ist (checkLabelAvailability in index.ts behandelt das
+// dann als 0 Treffer mit Fallback-URL auf die Übersichtsseite selbst).
+export function findAnostLabelEntry(html: string, label: string): { count: number; url: string } | null {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const needle = label.trim().toLowerCase();
+  const links = Array.from(doc.querySelectorAll('a[href*="/label/"]'));
+
+  for (const link of links) {
+    const text = link.textContent?.trim() ?? "";
+    const match = text.match(/^(.*?)\s*\[(\d+)\]$/);
+    if (!match) continue;
+    if (match[1].trim().toLowerCase() !== needle) continue;
+
+    const href = link.getAttribute("href") ?? "";
+    const url = href.startsWith("http") ? href : `https://www.anost.net${href.startsWith("/") ? "" : "/"}${href}`;
+    return { count: parseInt(match[2], 10), url };
+  }
+
+  return null;
+}

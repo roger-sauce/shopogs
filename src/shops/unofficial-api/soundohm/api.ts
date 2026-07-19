@@ -27,3 +27,15 @@ export async function searchSoundOhm(query: string): Promise<SoundOhmSearchRespo
   if (!res.ok) throw new Error(`SoundOhm search: HTTP ${res.status}`);
   return res.json();
 }
+
+// Für die Label-Suche ("Small Label Suche" in der UI) — verifiziert per
+// Recon: die quickSearch-Antwort für eine Label-Namens-Anfrage enthält
+// Produkte mit label_info[].slug, darüber lässt sich die eigentliche
+// Label-Seite /label/<slug> auflösen. Diese Seite listet alle Releases des
+// Labels server-gerendert, ein Treffer pro ".product"-Element (siehe
+// transform.ts).
+export async function fetchSoundOhmLabelPage(slug: string): Promise<string> {
+  const res = await fetch(`${PROXY_BASE}/label/${slug}`, { headers: { Accept: "text/html" } });
+  if (!res.ok) throw new Error(`SoundOhm label page: HTTP ${res.status}`);
+  return res.text();
+}

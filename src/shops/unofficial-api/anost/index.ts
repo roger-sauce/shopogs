@@ -1,7 +1,9 @@
-import type { ShopAdapter } from "../../../types/shop";
-import { searchAnost } from "./api";
-import { transformAnost } from "./transform";
+import type { ShopAdapter, LabelSearchResult } from "../../../types/shop";
+import { searchAnost, fetchAnostLabelsPage } from "./api";
+import { transformAnost, findAnostLabelEntry } from "./transform";
 import { matchesQueryWords } from "../../../lib/relevance";
+
+const ANOST_LABELS_URL = "https://www.anost.net/labels";
 
 const anost: ShopAdapter = {
   id: "anost",
@@ -38,6 +40,16 @@ const anost: ShopAdapter = {
     // für diese Anfrage als vertrauenswürdig.
     const hasMatchingArtist = (raw.artists ?? []).some((a) => matchesQueryWords(a.name, artistNeedle));
     return hasMatchingArtist ? results : [];
+  },
+  async checkLabelAvailability(label): Promise<LabelSearchResult> {
+    const needle = label.trim();
+    if (!needle) return { supported: true, count: 0, url: ANOST_LABELS_URL };
+
+    const html = await fetchAnostLabelsPage();
+    const entry = findAnostLabelEntry(html, needle);
+    if (!entry) return { supported: true, count: 0, url: ANOST_LABELS_URL };
+
+    return { supported: true, count: entry.count, url: entry.url };
   },
 };
 

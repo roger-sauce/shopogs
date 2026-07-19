@@ -70,6 +70,18 @@ export async function fetchBoomkatArtistPage(slug: string): Promise<string> {
   return res.text();
 }
 
+// Label-Übersichtsseite für die Label-Suche ("Small Label Suche" in der UI)
+// -- gleiches Grid-Markup wie die Artist-Übersichtsseite, aber unter
+// /labels/<slug>. per_page=100 verifiziert per Recon, um auch mittelgroße
+// Label-Kataloge auf einer einzigen Seite zu bekommen.
+export async function fetchBoomkatLabelPage(slug: string): Promise<string> {
+  const res = await fetch(`${PROXY_BASE}/labels/${slug}?per_page=100`, {
+    headers: { Accept: "text/html" },
+  });
+  if (!res.ok) throw new Error(`Boomkat label page: HTTP ${res.status}`);
+  return res.text();
+}
+
 // Meldet dem Sidecar, dass diese Suche abgeschlossen ist -- schließt die
 // offene Camoufox-Session sofort, statt bis zum Idle-Timeout zu warten
 // (siehe sidecar/src/browserSession.js). Wird von checkAvailability() immer

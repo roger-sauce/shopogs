@@ -45,6 +45,26 @@ export interface AvailabilityResult {
   status: AvailabilityStatus;
 }
 
+/**
+ * Ergebnis einer Label-Suche (siehe checkLabelAvailability) -- anders als bei
+ * der normalen Artist/Titel-Suche wird hier NICHT die Trefferliste selbst
+ * angezeigt (die kann bei großen Labels vierstellig werden), sondern nur die
+ * Trefferanzahl je Shop plus ein Absprunglink auf die entsprechende
+ * Shop-eigene Seite -- der User verifiziert/stöbert dort selbst weiter.
+ *
+ *   supported: false -- der Shop hat keinen brauchbaren Weg, nach Label zu
+ *              suchen/filtern (siehe Recon: Bis Aufs Messer). count/url
+ *              existieren dann gar nicht erst.
+ *   supported: true, count: 0 -- Shop unterstützt Label-Suche, führt dieses
+ *              Label aber nicht (z.B. Souffle Continu bei den meisten
+ *              kleinen US-Labels). url zeigt in diesem Fall auf die
+ *              nächstbeste Übersichtsseite (z.B. das alphabetische
+ *              Label-Verzeichnis), nicht auf eine 404-Detailseite.
+ */
+export type LabelSearchResult =
+  | { supported: false }
+  | { supported: true; count: number; url: string };
+
 export interface ShopAdapter {
   /** z.B. "hard-wax" */
   id: string;
@@ -78,4 +98,12 @@ export interface ShopAdapter {
     title: string,
     format?: Format
   ) => Promise<AvailabilityResult[]>;
+  /**
+   * Label-Suche (siehe "Small Label Suche" in der UI) -- optional, weil
+   * nicht jeder Shop einen brauchbaren Weg bietet, nach Label zu
+   * suchen/filtern (siehe Recon: Bis Aufs Messer hat gar keine Funktion,
+   * dort bleibt dieses Feld schlicht undefined -- die UI zeigt dann
+   * "nicht unterstützt" an, ganz ohne extra Fehlerbehandlung).
+   */
+  checkLabelAvailability?: (label: string) => Promise<LabelSearchResult>;
 }

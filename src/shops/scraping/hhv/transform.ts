@@ -53,3 +53,37 @@ export function transformHhvListEntry(html: string, articleId: string): Availabi
     status,
   };
 }
+
+// Sucht auf der Katalog-Suchseite ein Element mit data-title, dessen Wert
+// exakt dem gesuchten Label-Namen entspricht (case-insensitive), und liefert
+// den zugehörigen data-path zurück -- das ist der Link auf die
+// Label-gefilterte Trefferliste. data-title/data-path können laut Recon auf
+// demselben Element oder auf einem nahegelegenen Vorfahren sitzen, daher wird
+// zuerst das Element selbst geprüft und dann der nächste Vorfahre mit
+// data-path.
+export function findHhvLabelDataPath(html: string, label: string): string | null {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const needle = label.trim().toLowerCase();
+  const titleEls = Array.from(doc.querySelectorAll("[data-title]"));
+
+  for (const el of titleEls) {
+    const title = el.getAttribute("data-title")?.trim().toLowerCase() ?? "";
+    if (title !== needle) continue;
+
+    const direct = el.getAttribute("data-path");
+    if (direct) return direct;
+
+    const ancestor = el.closest("[data-path]");
+    if (ancestor) return ancestor.getAttribute("data-path");
+  }
+
+  return null;
+}
+
+// Liest die Trefferanzahl aus der Label-gefilterten Trefferliste. Verifiziert
+// per Recon: die Seite zeigt eine Überschrift im Muster "<N> Artikel" an.
+export function extractHhvArticleCount(html: string): number {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const match = (doc.body?.textContent ?? "").match(/(\d+)\s*Artikel/i);
+  return match ? parseInt(match[1], 10) : 0;
+}

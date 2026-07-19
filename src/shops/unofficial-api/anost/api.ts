@@ -33,3 +33,14 @@ export async function searchAnost(query: string): Promise<AnostSearchResponse> {
   if (!res.ok) throw new Error(`ANOST search: HTTP ${res.status}`);
   return res.json();
 }
+
+// Für die Label-Suche ("Small Label Suche" in der UI) — verifiziert per
+// Recon: /labels listet ALLE Labels alphabetisch server-gerendert als
+// einzelne Links "<Name> [<Anzahl>]" (z.B. "Balmat [8]" ->
+// /label/8B2D/balmat). Kein separates JSON-API dafür nötig, ein einziger
+// Seitenaufruf reicht (siehe transform.ts für den Parser).
+export async function fetchAnostLabelsPage(): Promise<string> {
+  const res = await fetch(`${PROXY_BASE}/labels`, { headers: { Accept: "text/html" } });
+  if (!res.ok) throw new Error(`ANOST labels page: HTTP ${res.status}`);
+  return res.text();
+}

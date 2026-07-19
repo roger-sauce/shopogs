@@ -29,3 +29,12 @@ export function transformSoundOhm(raw: SoundOhmSearchResponse): AvailabilityResu
       status: statusFor(p.preorder),
     }));
 }
+
+// Zählt die Treffer auf einer Label-Übersichtsseite (/label/<slug>).
+// Verifiziert per Recon: jedes gelistete Release steckt in einem Element
+// mit der Klasse "product" (gleiches Markup-Muster wie die normale
+// Suchergebnisliste).
+export function countSoundOhmLabelProducts(html: string): number {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  return doc.querySelectorAll(".product").length;
+}
