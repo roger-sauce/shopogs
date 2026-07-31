@@ -5,7 +5,11 @@ services:
       dockerfile: Dockerfile
     container_name: shopogs
     ports:
-      - "8090:80"
+      # An die LAN-Adresse des Pi gebunden statt an 0.0.0.0: der Port wird
+      # nur vom Nginx Proxy Manager gebraucht, muss also nicht auf jeder
+      # Schnittstelle lauschen. Docker haengt seine Regeln vor die
+      # Host-Firewall, deshalb ist die Bindung hier wirksamer als nftables.
+      - "192.168.178.48:8090:80"
     restart: unless-stopped
     depends_on:
       - browser-sidecar
@@ -19,8 +23,11 @@ services:
       dockerfile: Dockerfile
     container_name: browser-sidecar
     restart: unless-stopped
-    ports:
-      - "3001:3001"
+    # Kein ports:-Eintrag mehr -- der Sidecar wird ausschliesslich von
+    # shopogs ueber das Docker-Netz per Containername angesprochen
+    # (nginx.conf: proxy_pass http://browser-sidecar:3001). Ihn auf dem Host
+    # zu veroeffentlichen hat nur Angriffsflaeche erzeugt: er rendert fremdes
+    # JavaScript und ist damit der exponierteste Teil des Stacks.
 
 networks:
   shared-proxy-net:
