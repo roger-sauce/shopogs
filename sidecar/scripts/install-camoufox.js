@@ -19,7 +19,15 @@ const AdmZip = require("adm-zip");
 const INSTALL_DIR = process.env.CAMOUFOX_INSTALL_DIR || "/opt/camoufox";
 const VERSION = "135.0.1";
 const RELEASE = "beta.24";
-const ZIP_URL = `https://github.com/daijro/camoufox/releases/download/v${VERSION}-${RELEASE}/camoufox-${VERSION}-${RELEASE}-lin.x86_64.zip`;
+// Architektur aus der Build-Umgebung ableiten statt hart auf x86_64: der
+// Stack zieht von der amd64-QNAP auf einen arm64-Raspberry-Pi um, und
+// Camoufox ist ein eigenes Firefox-Binary (kein Playwright-Browser), muss
+// also zur Host-Architektur passen. v135.0.1-beta.24 hat beide Builds als
+// vollwertige ZIPs (lin.arm64 674MB, lin.x86_64 680MB) -- die gepinnte,
+// bekannt funktionierende Version bleibt damit unangetastet. process.arch
+// statt fest "arm64", damit ein Build auf amd64 weiterhin funktioniert.
+const ARCH = process.arch === "arm64" ? "arm64" : "x86_64";
+const ZIP_URL = `https://github.com/daijro/camoufox/releases/download/v${VERSION}-${RELEASE}/camoufox-${VERSION}-${RELEASE}-lin.${ARCH}.zip`;
 const ZIP_PATH = "/tmp/camoufox-manual.zip";
 
 function download(url, dest, redirectsLeft = 5) {
