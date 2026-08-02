@@ -35,7 +35,10 @@ services:
     image: caddy:2-alpine
     container_name: shopogs-caddy
     ports:
-      - "192.168.178.48:5443:5443"
+      # BIND_ADDR steht in der .env (nicht im Repo) und ist die LAN-Adresse
+      # des Hosts. Der Vorgabewert 127.0.0.1 ist bewusst restriktiv: ein
+      # frischer Klon ohne .env stellt damit nichts versehentlich ins Netz.
+      - "${BIND_ADDR:-127.0.0.1}:5443:5443"
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - ./caddy/certs:/certs:ro

@@ -3,6 +3,7 @@ dist
 .git
 .DS_Store
 caddy/
+.env
 *.local
 HANDOFF.md
 ADAPTER_HOWTO.md
