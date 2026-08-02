@@ -29,6 +29,26 @@ services:
     # zu veroeffentlichen hat nur Angriffsflaeche erzeugt: er rendert fremdes
     # JavaScript und ist damit der exponierteste Teil des Stacks.
 
+  # TLS-Terminierung fuer den internen Zugriff im Heimnetz. Zertifikat von
+  # der lokalen mkcert-CA, siehe caddy/Caddyfile. Liegt im Docker-Netz des
+  # Projekts und erreicht shopogs ueber den Containernamen -- deshalb braucht
+  # shopogs keinen veroeffentlichten Host-Port mehr.
+  caddy:
+    image: caddy:2-alpine
+    container_name: shopogs-caddy
+    ports:
+      - "192.168.178.48:5443:5443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/certs:/certs:ro
+      - caddy-data:/data
+    depends_on:
+      - shopogs
+    restart: unless-stopped
+
+volumes:
+  caddy-data:
+
 networks:
   shared-proxy-net:
     external: true

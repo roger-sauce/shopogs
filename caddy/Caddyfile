@@ -1,0 +1,18 @@
+# TLS-Terminierung fuer shopogs im Heimnetz. Zertifikat kommt von mkcert
+# (lokale CA, dieselbe wie bei Crate und autoplay-pi auf roon-bridge),
+# deshalb auto_https off -- Caddy soll nichts bei Let's Encrypt anfragen,
+# .local-Namen sind dort ohnehin nicht zertifizierbar.
+#
+# Der Caddy laeuft im Docker-Netz des Projekts und erreicht shopogs ueber den
+# Containernamen. Dadurch braucht shopogs keinen veroeffentlichten Host-Port
+# mehr -- der Nginx Proxy Manager spricht den Container ebenfalls ueber
+# shared-proxy-net an.
+{
+	auto_https off
+	admin off
+}
+
+:5443 {
+	tls /certs/extern-local.pem /certs/extern-local-key.pem
+	reverse_proxy shopogs:80
+}
