@@ -61,6 +61,25 @@ services:
     # ein Ausfall zeigt sich hier als leeres Ergebnis, nicht als Absturz.
     security_opt:
       - no-new-privileges:true
+    # Ein Browser braucht keine Kernel-Faehigkeiten: er bindet keinen
+    # privilegierten Port, wechselt keinen Benutzer und fasst keine
+    # Netzwerkkonfiguration an. Deshalb alle entziehen und keine
+    # zurueckgeben. Falls Camoufox doch nicht startet, waere das an einer
+    # Fehlermeldung im Log erkennbar -- nicht an leeren Suchergebnissen.
+    cap_drop:
+      - ALL
+    # Kein Haertungsschritt, sondern Stabilitaet: Firefox legt gemeinsam
+    # genutzte Speicherbereiche in /dev/shm ab, und Dockers Vorgabe von
+    # 64 MB ist dafuer knapp -- Symptom waeren sporadische Abstuerze unter
+    # Last. Der autoplay-pi-Container auf roon-bridge hat das aus demselben
+    # Grund.
+    shm_size: "1gb"
+    #
+    # Offen und bewusst nicht hier geloest: Der Container laeuft als root,
+    # das Dockerfile setzt kein USER. Das Playwright-Image bringt einen
+    # "pwuser" mit -- der Wechsel dorthin waere fuer diesen Container der
+    # wirksamste Schritt, verlangt aber Aenderungen am Dockerfile samt
+    # Eigentuemerrechten an /opt/camoufox und einen vollstaendigen Neubau.
 
   # TLS-Terminierung fuer den internen Zugriff im Heimnetz. Zertifikat von
   # der lokalen mkcert-CA, siehe caddy/Caddyfile. Liegt im Docker-Netz des
