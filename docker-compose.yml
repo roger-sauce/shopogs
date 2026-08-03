@@ -31,6 +31,16 @@ services:
       - SETUID
       - SETGID
       - CHOWN
+    # Schreibgeschuetztes Wurzeldateisystem, mit drei tmpfs fuer die
+    # Bereiche, in die nginx schreiben muss: /run fuer nginx.pid,
+    # /var/cache/nginx fuer die Proxy-Zwischenspeicher, /tmp fuer
+    # temporaere Dateien. Letzterer ist hier nicht nebensaechlich: die
+    # /proxy/-Locations puffern Antworten der Shops zwischen.
+    read_only: true
+    tmpfs:
+      - /run
+      - /tmp
+      - /var/cache/nginx
 
   browser-sidecar:
     build:
