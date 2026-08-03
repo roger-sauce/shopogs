@@ -20,6 +20,17 @@ services:
     # einer setuid-Datei.
     security_opt:
       - no-new-privileges:true
+    # Alle Faehigkeiten entziehen, nur die vier noetigen zurueckgeben:
+    #   NET_BIND_SERVICE  Port 80 im Container liegt unter 1024
+    #   SETUID / SETGID   Master laeuft als root, Worker als nginx
+    #   CHOWN             das Entrypoint-Skript des Images setzt Eigentuemer
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+      - SETUID
+      - SETGID
+      - CHOWN
 
   browser-sidecar:
     build:
