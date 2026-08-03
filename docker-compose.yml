@@ -14,6 +14,12 @@ services:
     networks:
       - default
       - shared-proxy-net
+    # Verhindert Rechteausweitung ueber setuid-Dateien im Container. nginx
+    # ist davon nicht betroffen: der Master startet als root und wechselt per
+    # setuid()-Aufruf auf den nginx-Benutzer -- ein Syscall, kein Ausfuehren
+    # einer setuid-Datei.
+    security_opt:
+      - no-new-privileges:true
 
   browser-sidecar:
     build:
@@ -26,6 +32,14 @@ services:
     # (nginx.conf: proxy_pass http://browser-sidecar:3001). Ihn auf dem Host
     # zu veroeffentlichen hat nur Angriffsflaeche erzeugt: er rendert fremdes
     # JavaScript und ist damit der exponierteste Teil des Stacks.
+    #
+    # Der wichtigste Container fuer diese Option -- und zugleich der mit dem
+    # groessten Restrisiko: Camoufox ist ein gepatchter Firefox, dessen
+    # Sandbox User-Namespaces nutzt. Setuid-Helfer verwendet sie nicht, das
+    # sollte also tragen. Nach dem Setzen unbedingt HHV UND Boomkat suchen --
+    # ein Ausfall zeigt sich hier als leeres Ergebnis, nicht als Absturz.
+    security_opt:
+      - no-new-privileges:true
 
   # TLS-Terminierung fuer den internen Zugriff im Heimnetz. Zertifikat von
   # der lokalen mkcert-CA, siehe caddy/Caddyfile. Liegt im Docker-Netz des
@@ -45,6 +59,8 @@ services:
       - caddy-data:/data
     depends_on:
       - shopogs
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
 
 volumes:
