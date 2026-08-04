@@ -24,8 +24,16 @@ const { navigateAndGetHtml, fetchViaBrowser, invalidateSession, isAjaxPath } = r
 const PORT = process.env.PORT || 3001;
 
 function looksLikeChallenge(result, isAjax) {
-  // HTTP-Fehlerstatus ist ein generisches Blockiert-Signal (z.B. Boomkats
-  // HTTP 403 bei TLS-/Bot-Fingerprinting) -- unabhängig vom Endpunkt-Typ.
+  // 404 ist eine echte Antwort, kein Block: Die Seite existiert nicht. Der
+  // Sidecar meldet das seit dem 04.08.2026 selbst so, wenn eine Navigation
+  // mit NS_BINDING_ABORTED abbricht -- bei Boomkat der Fall, wenn die
+  // Autocomplete-Schnittstelle einen Produktlink zu einer nicht vorhandenen
+  // Platte liefert. Ein Wiederholungsversuch mit frischer Session waere hier
+  // reine Zeitverschwendung, das Ergebnis bliebe dasselbe.
+  if (result.status === 404) return false;
+  // Sonstiger HTTP-Fehlerstatus ist ein generisches Blockiert-Signal (z.B.
+  // Boomkats HTTP 403 bei TLS-/Bot-Fingerprinting) -- unabhängig vom
+  // Endpunkt-Typ.
   if (result.status >= 400) return true;
   // AJAX/JSON-Antworten dürfen legitim kurz sein (z.B. 0 Autocomplete-
   // Treffer) -- kein Größen-Check, sonst False Positives.

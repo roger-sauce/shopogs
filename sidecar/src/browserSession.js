@@ -102,6 +102,45 @@ async function acceptCookieBannerIfPresent(shop, page) {
   }
 }
 
+// Navigation mit "networkidle" als WUNSCH statt als Bedingung.
+//
+// networkidle gilt als erfüllt, wenn eine halbe Sekunde lang keine
+// Netzwerkanfrage läuft. Auf Shop-Seiten mit Analytik, Werbung oder
+// Long-Polling tritt dieser Zustand nie ein -- und dann scheiterte der
+// gesamte Aufruf nach 30 Sekunden, obwohl die Seite längst vollständig
+// geladen war. Beobachtet bei HHV am 04.08.2026: dieselbe Suche schlug fehl
+// und lief beim zweiten Versuch durch, je nachdem was die Tracking-Skripte
+// gerade taten. Playwright rät in der eigenen Dokumentation von networkidle
+// als Wartebedingung ab.
+//
+// Deshalb: Zeitüberschreitung protokollieren und mit dem vorhandenen Stand
+// weiterarbeiten. Ist die Seite tatsächlich unbrauchbar, greift die
+// Challenge-Erkennung in server.js (ungewöhnlich kleiner Body) und erzwingt
+// einen Versuch mit frischer Session.
+async function gotoTolerant(page, url, beschreibung) {
+  try {
+    await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
+  } catch (e) {
+    if (e.name === "TimeoutError") {
+      console.log(
+        `[browser-sidecar][debug] networkidle nicht erreicht für ${beschreibung} -- arbeite mit dem geladenen Stand weiter`
+      );
+      return "timeout";
+    }
+    // NS_BINDING_ABORTED: die Navigation wurde abgebrochen. Bei Boomkat der
+    // Fall, wenn die Autocomplete-Schnittstelle einen Produktlink zu einer
+    // Seite liefert, die es nicht gibt -- sie tut das auch für Platten, die
+    // dort gar nicht gefuehrt werden. Das ist kein Fehler, sondern schlicht
+    // kein Treffer, und gehoert nicht als Stacktrace ins Protokoll.
+    if (/NS_BINDING_ABORTED/.test(e.message)) {
+      console.log(`[browser-sidecar][debug] Navigation abgebrochen für ${beschreibung} -- kein Treffer`);
+      return "abgebrochen";
+    }
+    throw e;
+  }
+  return "ok";
+}
+
 async function setupSession(shop) {
   const config = getShopConfig(shop);
   if (!config) throw new Error(`Unbekannter Shop: ${shop}`);
@@ -121,7 +160,7 @@ async function setupSession(shop) {
 
   // Startseite zuerst -- siehe Erklärung oben (Origin/Cookies warm machen,
   // bevor irgendein fetch() aus der Seite heraus läuft).
-  await page.goto(config.origin, { waitUntil: "networkidle", timeout: 30000 });
+  await gotoTolerant(page, config.origin, `${shop} Startseite`);
   await page.waitForTimeout(1000);
   await acceptCookieBannerIfPresent(shop, page);
 
@@ -156,7 +195,16 @@ async function navigateAndGetHtml(shop, path) {
   const session = await getSession(shop);
   const url = path.startsWith("http") ? path : `${config.origin}${path}`;
 
-  await session.page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
+  const ergebnis = await gotoTolerant(session.page, url, `${shop} ${path}`);
+
+  // Abgebrochene Navigation heisst: die Zielseite existiert nicht. Als 404
+  // melden statt als Fehler -- der Aufrufer in index.ts wertet das dann als
+  // "kein Treffer" und schreibt keinen Stacktrace ins Protokoll.
+  if (ergebnis === "abgebrochen") {
+    touchSession(shop);
+    return { status: 404, body: "", contentType: "text/html" };
+  }
+
   await session.page.waitForTimeout(2000);
   await acceptCookieBannerIfPresent(shop, session.page);
 
