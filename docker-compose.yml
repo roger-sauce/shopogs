@@ -101,6 +101,12 @@ services:
       - shopogs
     security_opt:
       - no-new-privileges:true
+    # Keine Faehigkeit noetig: Port 5443 liegt ueber 1024, kein
+    # Benutzerwechsel, keine Netzwerkkonfiguration. Setzt voraus, dass
+    # caddy/certs/ root gehoert -- cap_drop: ALL nimmt root sonst mit
+    # DAC_OVERRIDE die Moeglichkeit, den Schluessel mit Rechten 600 zu lesen.
+    cap_drop:
+      - ALL
     restart: unless-stopped
 
 volumes:
