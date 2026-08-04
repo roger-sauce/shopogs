@@ -13,6 +13,16 @@
 }
 
 :5443 {
+	# Zugriffsprotokoll. Caddy schreibt es nur, wenn man es ausdruecklich
+	# einschaltet -- ohne diese Zeile gibt es keine Zugriffszeilen, nur
+	# Betriebsmeldungen. Format ist JSON, eine Zeile je Anfrage, mit
+	# request.remote_ip und status.
+	#
+	# Vorbereitung fuer den geplanten Wechsel vom Nginx Proxy Manager auf
+	# Caddy: fail2ban liest bisher NPMs Zeilen mit einem Filter, der auf
+	# "[Client <IP>]" passt. Caddys JSON braucht einen eigenen Filter, und
+	# der laesst sich nur an echten Zeilen entwickeln.
+	log
 	tls /certs/extern-local.pem /certs/extern-local-key.pem
 	reverse_proxy shopogs:80
 }
