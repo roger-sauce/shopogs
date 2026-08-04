@@ -101,12 +101,19 @@ services:
       - shopogs
     security_opt:
       - no-new-privileges:true
-    # Keine Faehigkeit noetig: Port 5443 liegt ueber 1024, kein
-    # Benutzerwechsel, keine Netzwerkkonfiguration. Setzt voraus, dass
-    # caddy/certs/ root gehoert -- cap_drop: ALL nimmt root sonst mit
-    # DAC_OVERRIDE die Moeglichkeit, den Schluessel mit Rechten 600 zu lesen.
+    # NET_BIND_SERVICE wird nicht fuer den Port gebraucht -- 5443 liegt ueber
+    # 1024 -- sondern damit die Binaerdatei startet: das Caddy-Image setzt
+    # "setcap cap_net_bind_service=+ep /usr/bin/caddy". Der Kernel verweigert
+    # execve, wenn eine Datei Faehigkeiten traegt, die nicht im Bounding Set
+    # liegen, und cap_drop: ALL leert dieses Set.
+    #
+    # Ausserdem Voraussetzung: caddy/certs/ gehoert root. Ohne DAC_OVERRIDE
+    # koennte der Container-root den Schluessel mit Rechten 600 sonst nicht
+    # lesen. Zertifikate erneuern geht dadurch nur noch mit sudo.
     cap_drop:
       - ALL
+    cap_add:
+      - NET_BIND_SERVICE
     restart: unless-stopped
 
 volumes:
