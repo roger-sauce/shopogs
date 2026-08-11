@@ -15,13 +15,13 @@ const soundohm: ShopAdapter = {
   type: "unofficial-api",
   speed: "fast",
   async checkAvailability(artist, title) {
-    // SoundOhms quickSearch matcht die Anfrage nur als exakte Phrase gegen
-    // Titel/Katalog-Felder, nicht gegen den Artist-Namen (verifiziert per
-    // Recon: "Andrew Anderson" alleine liefert 0 Treffer, obwohl der Artist
-    // existiert; "Thresholds" alleine findet die Platte korrekt). Ein
-    // kombinierter "Artist Titel"-String schlägt deshalb fast immer fehl.
-    // Daher: bevorzugt nur den Titel suchen, Artist nur als Fallback wenn
-    // kein Titel angegeben wurde.
+    // SoundOhm's quickSearch matches the query only as an exact phrase
+    // against title/catalogue fields, not against the artist name (verified
+    // by recon: "Andrew Anderson" on its own returns 0 hits even though the
+    // artist exists; "Thresholds" on its own finds the record correctly). A
+    // combined "artist title" string therefore almost always fails.
+    // Hence: prefer searching the title only, artist just as a fallback when
+    // no title was given.
     const titleNeedle = title.trim();
     const artistNeedle = artist.trim();
     const query = titleNeedle || artistNeedle;
@@ -31,36 +31,37 @@ const soundohm: ShopAdapter = {
     const rawResults = transformSoundOhm(raw);
 
     if (titleNeedle) {
-      // SoundOhms Suche matcht lose per Substring, nicht nur ganze Wörter —
-      // Suche "Memoria" fand z.B. auch "Memorial", "In Memoriam" o.ä.
-      // (verifiziert). Deshalb clientseitig auf ganze Wortübereinstimmung
-      // gegen den Titel nachfiltern (erlaubt weiterhin Fragment-Suche über
-      // mehrere Wörter, verhindert aber solche Substring-Fehltreffer).
+      // SoundOhm's search matches loosely by substring, not only whole words —
+      // searching "Memoria" also found e.g. "Memorial", "In Memoriam" and the
+      // like (verified). So filter client-side for whole-word matches
+      // against the title (still allows fragment searches spanning
+      // several words, but prevents such substring false positives).
       const results = rawResults.filter((r) => matchesQueryWords(r.title, titleNeedle));
 
       if (!artistNeedle) return results;
 
-      // Titel-Suche kann mehrere Artists treffen (z.B. gleichnamige Titel) —
-      // zusätzlich nach Artist filtern. Kein Fallback auf "alle Treffer" mehr,
-      // wenn das 0 Ergebnisse liefert: das hat bisher dazu geführt, dass ein
-      // klar falscher Artist trotzdem angezeigt wurde, sobald KEIN Treffer den
-      // Artist bestätigte (z.B. Suche "Lovegod Rendezvous" zeigte einen
-      // "Rendezvous"-Treffer von einem ganz anderen Artist). Fehlt das
-      // Artist-Feld beim Treffer, lassen wir ihn weiterhin durch (kann nicht
-      // geprüft werden) — aber ein vorhandenes, nicht passendes Artist-Feld
-      // schließt den Treffer jetzt konsequent aus.
+      // A title search can hit several artists (e.g. identically named titles) —
+      // so filter by artist as well. No more fallback to "all hits" when
+      // that yields 0 results: until now that caused a clearly wrong
+      // artist to be shown anyway as soon as NO hit confirmed the
+      // artist (e.g. searching "Lovegod Rendezvous" showed a
+      // "Rendezvous" hit by a completely different artist). If the
+      // artist field is missing on a hit we still let it through (it cannot
+      // be checked) — but an artist field that is present and does not match
+      // now excludes the hit consistently.
       return results.filter(
         (r) => !r.artist || r.artist.toLowerCase().includes(artistNeedle.toLowerCase())
       );
     }
 
-    // Nur Artist angegeben, kein Titel: die Suche lief mit dem Artist-Namen
-    // als Query, matcht laut RECON.md aber nur gegen Titel/Katalog-Felder,
-    // nicht gegen den Artist-Namen selbst. Ohne diesen Filter kommen Treffer
-    // zurück, bei denen der Name zufällig im TITEL steht statt im
-    // Artist-Feld (live beobachtet: Suche "Sees" fand "... A Mountain Sees a
-    // Mountain" von Hamid Drake/Pat Thomas — "Sees" stand nur im Titel).
-    // Deshalb hier explizit gegen das ARTIST-Feld filtern, nicht den Titel.
+    // Only artist given, no title: the search ran with the artist name
+    // as the query, but according to RECON.md it matches only against
+    // title/catalogue fields, not against the artist name itself. Without this
+    // filter we get back hits where the name happens to appear in the TITLE
+    // instead of in the artist field (observed live: searching "Sees" found
+    // "... A Mountain Sees a Mountain" by Hamid Drake/Pat Thomas — "Sees"
+    // only appeared in the title).
+    // So filter explicitly against the ARTIST field here, not against the title.
     return rawResults.filter((r) => r.artist && matchesQueryWords(r.artist, artistNeedle));
   },
   async checkLabelAvailability(label): Promise<LabelSearchResult> {
@@ -74,9 +75,9 @@ const soundohm: ShopAdapter = {
       .find((l) => l.name.trim().toLowerCase() === needle.toLowerCase());
 
     if (!matchingLabel) {
-      // Kein Produkt mit passendem Label-Namen gefunden -- SoundOhm bietet
-      // (anders als ANOST) keine alphabetische Label-Übersichtsseite als
-      // sinnvollen Fallback-Link, daher Fallback auf die Homepage.
+      // No product with a matching label name found -- unlike ANOST,
+      // SoundOhm offers no alphabetical label index page as a
+      // sensible fallback link, so fall back to the homepage.
       return { supported: true, count: 0, url: SOUNDOHM_HOME_URL };
     }
 

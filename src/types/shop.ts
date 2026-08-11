@@ -1,97 +1,97 @@
 export type Format = "All" | "Vinyl" | "CD" | "Cassette" | "Download";
-/** Format-Werte, die einzeln als Checkbox auswählbar sind (ohne "All"). */
+/** Format values selectable individually as a checkbox (without "All"). */
 export type SelectableFormat = Exclude<Format, "All">;
 
 export type ShopGroup = "pickup-berlin" | "mail-order";
 
 /**
- * fast – normale HTTP-Suche (nginx-Proxy mit Header-Spoofing), Ergebnis
- *        typischerweise in < 1s.
- * slow – jede Suche navigiert live durch einen Camoufox-Browser (siehe
- *        sidecar/), weil der Shop-Bot-Schutz sich nicht mit einfachen
- *        HTTP-Requests umgehen lässt (z.B. HHV: Cookie ist an den
- *        TLS-Fingerprint der Verbindung gebunden, die ihn geholt hat).
- *        Deutlich langsamer (Browser-Start + Challenge lösen).
+ * fast – normal HTTP search (nginx proxy with header spoofing), result
+ *        typically in < 1s.
+ * slow – every search navigates live through a Camoufox browser (see
+ *        sidecar/), because the shop's bot protection cannot be bypassed
+ *        with simple HTTP requests (e.g. HHV: the cookie is bound to the
+ *        TLS fingerprint of the connection that fetched it).
+ *        Considerably slower (browser startup + solving the challenge).
  */
 export type ShopSpeed = "fast" | "slow";
 
 /**
- * Alle Status, die ein Treffer haben kann, WENN er überhaupt bestellbar ist.
- * Ausverkaufte/nicht verfügbare Formate werden von den Adaptern gar nicht
- * erst als Treffer zurückgegeben (siehe checkAvailability) — es gibt also
- * bewusst keinen "sold_out"-Status hier.
+ * All statuses a hit can have, IF it is orderable at all. Sold out /
+ * unavailable formats are not returned as hits by the adapters in the
+ * first place (see checkAvailability) — so there is deliberately no
+ * "sold_out" status here.
  *
- *   in_stock   – normal auf Lager / sofort lieferbar
- *   preorder   – Vorbestellung, Release/Versand liegt in der Zukunft
- *   processing – bestellbar, aber (noch) nicht auf Lager; Lieferzeit
- *                ungewiss (z.B. SoundOhms "in process of stocking")
- *   last_copy  – auf Lager, aber nur noch (ein) letztes Exemplar
+ *   in_stock   – normally in stock / ships immediately
+ *   preorder   – pre-order, release/shipping lies in the future
+ *   processing – orderable, but not (yet) in stock; delivery time
+ *                uncertain (e.g. SoundOhm's "in process of stocking")
+ *   last_copy  – in stock, but only (one) last copy left
  */
 export type AvailabilityStatus = "in_stock" | "preorder" | "processing" | "last_copy";
 
 export interface AvailabilityResult {
-  /** ID des Shop-Adapters, z.B. "hard-wax" */
+  /** ID of the shop adapter, e.g. "hard-wax" */
   shopId: string;
-  /** Anzeigename des Titels, wie vom Shop geliefert */
+  /** Display name of the title, as supplied by the shop */
   title: string;
-  /** Künstler/Band, falls vom Shop getrennt geliefert */
+  /** Artist/band, if supplied separately by the shop */
   artist?: string;
-  /** Format-Label wie vom Shop geliefert, z.B. "2LP", "CD", "Cassette" */
+  /** Format label as supplied by the shop, e.g. "2LP", "CD", "Cassette" */
   format?: string;
   price?: string;
   currency?: string;
-  /** Direktlink zum Produkt/Suchergebnis im Shop */
+  /** Direct link to the product/search result in the shop */
   url?: string;
   status: AvailabilityStatus;
 }
 
 /**
- * Ergebnis einer Label-Suche (siehe checkLabelAvailability) -- anders als bei
- * der normalen Artist/Titel-Suche wird hier NICHT die Trefferliste selbst
- * angezeigt (die kann bei großen Labels vierstellig werden), sondern nur die
- * Trefferanzahl je Shop plus ein Absprunglink auf die entsprechende
- * Shop-eigene Seite -- der User verifiziert/stöbert dort selbst weiter.
+ * Result of a label search (see checkLabelAvailability) -- unlike the normal
+ * artist/title search, the hit list itself is NOT displayed here (for large
+ * labels it can run into four digits), only the number of hits per shop plus
+ * a jump-off link to the shop's own corresponding page -- the user verifies
+ * and browses further there.
  *
- *   supported: false -- der Shop hat keinen brauchbaren Weg, nach Label zu
- *              suchen/filtern (siehe Recon: Bis Aufs Messer). count/url
- *              existieren dann gar nicht erst.
- *   supported: true, count: 0 -- Shop unterstützt Label-Suche, führt dieses
- *              Label aber nicht (z.B. Souffle Continu bei den meisten
- *              kleinen US-Labels). url zeigt in diesem Fall auf die
- *              nächstbeste Übersichtsseite (z.B. das alphabetische
- *              Label-Verzeichnis), nicht auf eine 404-Detailseite.
+ *   supported: false -- the shop has no usable way to search/filter by
+ *              label (see Recon: Bis Aufs Messer). count/url then do not
+ *              exist in the first place.
+ *   supported: true, count: 0 -- the shop supports label search, but does
+ *              not carry this label (e.g. Souffle Continu for most small
+ *              US labels). url in this case points at the next best
+ *              overview page (e.g. the alphabetical label directory), not
+ *              at a 404 detail page.
  */
 export type LabelSearchResult =
   | { supported: false }
   | { supported: true; count: number; url: string };
 
 export interface ShopAdapter {
-  /** z.B. "hard-wax" */
+  /** e.g. "hard-wax" */
   id: string;
-  /** z.B. "Hard Wax" */
+  /** e.g. "Hard Wax" */
   name: string;
-  /** Land des Shops, z.B. "DE", "FR", "GB", "IT" */
+  /** Country of the shop, e.g. "DE", "FR", "GB", "IT" */
   country: string;
-  /** "pickup-berlin" für die 4 Berliner Läden, "mail-order" für den Rest */
+  /** "pickup-berlin" for the 4 Berlin shops, "mail-order" for the rest */
   group: ShopGroup;
-  /** "fast" (normale HTTP-Suche) oder "slow" (volle Camoufox-Browser-Navigation pro Suche) */
+  /** "fast" (normal HTTP search) or "slow" (full Camoufox browser navigation per search) */
   speed: ShopSpeed;
-  /** Homepage-URL, u.a. Fallback-Link falls ein Treffer keine eigene URL hat */
+  /** Homepage URL, also the fallback link if a hit has no URL of its own */
   homeUrl: string;
-  /** Pfad zu einem Logo unter /public/logos/ (optional, solange keins vorliegt) */
+  /** Path to a logo under /public/logos/ (optional, as long as there is none) */
   logoUrl?: string;
   /**
-   * official-api    – öffentlich dokumentierte API
-   * unofficial-api   – öffentlich erreichbare, aber nicht offiziell für
-   *                    Drittnutzung dokumentierte JSON-Endpoints
-   * scraping         – HTML-Ergebnisseiten werden geparst
+   * official-api    – publicly documented API
+   * unofficial-api   – publicly reachable JSON endpoints that are not
+   *                    officially documented for third-party use
+   * scraping         – HTML result pages are parsed
    */
   type: "official-api" | "unofficial-api" | "scraping";
   /**
-   * Sucht nach einem Titel im Shop und gibt alle gefundenen Treffer mit
-   * Verfügbarkeitsstatus zurück. `format` ist ein Hinweis-Filter, nicht
-   * jeder Adapter kann ihn serverseitig anwenden — im Zweifel clientseitig
-   * nachfiltern.
+   * Searches for a title in the shop and returns all hits found together
+   * with their availability status. `format` is a hint filter, not every
+   * adapter can apply it server-side — when in doubt, filter again on the
+   * client.
    */
   checkAvailability: (
     artist: string,
@@ -99,11 +99,11 @@ export interface ShopAdapter {
     format?: Format
   ) => Promise<AvailabilityResult[]>;
   /**
-   * Label-Suche (siehe "Small Label Suche" in der UI) -- optional, weil
-   * nicht jeder Shop einen brauchbaren Weg bietet, nach Label zu
-   * suchen/filtern (siehe Recon: Bis Aufs Messer hat gar keine Funktion,
-   * dort bleibt dieses Feld schlicht undefined -- die UI zeigt dann
-   * "nicht unterstützt" an, ganz ohne extra Fehlerbehandlung).
+   * Label search (see "Small Label Suche" in the UI) -- optional, because
+   * not every shop offers a usable way to search/filter by label (see
+   * Recon: Bis Aufs Messer has no such function at all, there this field
+   * simply stays undefined -- the UI then shows "nicht unterstützt",
+   * entirely without extra error handling).
    */
   checkLabelAvailability?: (label: string) => Promise<LabelSearchResult>;
 }

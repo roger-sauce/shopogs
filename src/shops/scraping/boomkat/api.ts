@@ -1,33 +1,34 @@
-// Boomkat (boomkat.com) — Spree Commerce (Rails), server-gerendertes HTML.
-// Verifiziert per Live-Recon (Format hat sich seit der alten Recon geändert
-// -- die Autocomplete-API liefert inzwischen KEINE separaten Artist-Treffer
-// mehr, nur noch Release-Treffer direkt mit Artist(s) + Produktlink):
-//   1) GET /api/autocomplete?query=<begriff> — Release-Treffer:
-//      { type: "Release", value: <Titel>, url: "/products/<slug>",
-//        artists: string[], ... } (JSON, ohne Stock-Info).
-//   2) GET /products/<slug> — Produktseite, enthält ein
-//      <script type="application/ld+json"> mit allen Formaten in einem
-//      Rutsch (Name/Preis/Währung/Verfügbarkeit je Format als
-//      schema.org-Offer) -- kein separater in-stock/out-of-stock-Query-Param
-//      mehr nötig wie in der alten Recon, ein Seitenaufruf reicht.
-//
-// Läuft über den Browser-Sidecar (siehe sidecar/src/browserSession.js),
-// nicht mehr über einen simplen Reverse-Proxy -- der wurde zuverlässig mit
-// HTTP 403 geblockt (vermutlich TLS-/Bot-Fingerprinting, das ein einfacher
-// Node-Reverse-Proxy nicht imitieren kann; Camoufox patcht Firefox genau
-// dagegen). Jede Suche baut dort eine eigene Session auf, die per
-// closeBoomkatSession() nach der Suche wieder geschlossen wird -- gleiches
-// Muster wie bei HHV.
-const PROXY_BASE = "/proxy/boomkat";
+import { proxyBase } from "../../../lib/proxyBase";
 
-// Wandelt einen Artist-Namen in den URL-Slug der Artist-Übersichtsseite um
-// (z.B. "Sees" -> "sees"). Muster für Mehrwort-Namen nicht zu 100%
-// verifiziert -- falls der Slug nicht existiert, greift in index.ts der
-// Fallback auf die Autocomplete-Suche.
+// Boomkat (boomkat.com) — Spree Commerce (Rails), server-rendered HTML.
+// Verified by live recon (the format has changed since the old recon -- the
+// autocomplete API no longer returns separate artist hits, only release hits
+// directly, with artist(s) + product link):
+//   1) GET /api/autocomplete?query=<term> — release hits:
+//      { type: "Release", value: <title>, url: "/products/<slug>",
+//        artists: string[], ... } (JSON, without stock info).
+//   2) GET /products/<slug> — product page, contains a
+//      <script type="application/ld+json"> with all formats in one go
+//      (name/price/currency/availability per format as a schema.org offer)
+//      -- no separate in-stock/out-of-stock query param needed any more as
+//      in the old recon, a single page request is enough.
+//
+// Runs through the browser sidecar (see sidecar/src/browserSession.js), no
+// longer through a simple reverse proxy -- that one was reliably blocked with
+// HTTP 403 (presumably TLS/bot fingerprinting that a plain Node reverse proxy
+// cannot imitate; Camoufox patches Firefox for exactly that). Every search
+// sets up its own session there, which is closed again after the search via
+// closeBoomkatSession() -- same pattern as with HHV.
+const PROXY_BASE = proxyBase("boomkat");
+
+// Converts an artist name into the URL slug of the artist overview page
+// (e.g. "Sees" -> "sees"). The pattern for multi-word names is not verified
+// 100% -- if the slug does not exist, the fallback to the autocomplete search
+// in index.ts kicks in.
 export function slugifyArtist(artist: string): string {
-  // NFD zerlegt z.B. "é" in "e" + Akzent-Zeichen -- danach reicht ein Filter
-  // auf ASCII-Zeichencodes, um die Akzente wieder loszuwerden (robuster als
-  // ein Unicode-Bereichs-Regex für Kombinationszeichen).
+  // NFD decomposes e.g. "é" into "e" + an accent character -- after that a
+  // filter on ASCII character codes is enough to get rid of the accents again
+  // (more robust than a Unicode range regex for combining characters).
   const ascii = artist
     .normalize("NFD")
     .split("")
@@ -61,19 +62,19 @@ export async function fetchBoomkatProductPage(productUrlPath: string): Promise<s
   return res.text();
 }
 
-// Artist-Übersichtsseite -- listet (im Gegensatz zur Autocomplete-API) alle
-// Releases eines Artists vollständig auf, wichtig für kurze/generische
-// Artist-Namen bei reiner Artist-Suche (siehe index.ts).
+// Artist overview page -- lists (unlike the autocomplete API) all releases of
+// an artist in full, which matters for short/generic artist names in an
+// artist-only search (see index.ts).
 export async function fetchBoomkatArtistPage(slug: string): Promise<string> {
   const res = await fetch(`${PROXY_BASE}/artists/${slug}`, { headers: { Accept: "text/html" } });
   if (!res.ok) throw new Error(`Boomkat artist page: HTTP ${res.status}`);
   return res.text();
 }
 
-// Label-Übersichtsseite für die Label-Suche ("Small Label Suche" in der UI)
-// -- gleiches Grid-Markup wie die Artist-Übersichtsseite, aber unter
-// /labels/<slug>. per_page=100 verifiziert per Recon, um auch mittelgroße
-// Label-Kataloge auf einer einzigen Seite zu bekommen.
+// Label overview page for the label search ("Small Label Suche" in the UI)
+// -- same grid markup as the artist overview page, but under /labels/<slug>.
+// per_page=100 verified by recon, so that even medium-sized label catalogues
+// fit on a single page.
 export async function fetchBoomkatLabelPage(slug: string): Promise<string> {
   const res = await fetch(`${PROXY_BASE}/labels/${slug}?per_page=100`, {
     headers: { Accept: "text/html" },
@@ -82,10 +83,10 @@ export async function fetchBoomkatLabelPage(slug: string): Promise<string> {
   return res.text();
 }
 
-// Meldet dem Sidecar, dass diese Suche abgeschlossen ist -- schließt die
-// offene Camoufox-Session sofort, statt bis zum Idle-Timeout zu warten
-// (siehe sidecar/src/browserSession.js). Wird von checkAvailability() immer
-// per finally aufgerufen, auch bei Fehlern.
+// Tells the sidecar that this search is finished -- closes the open Camoufox
+// session immediately instead of waiting for the idle timeout (see
+// sidecar/src/browserSession.js). Always called by checkAvailability() from a
+// finally block, including on errors.
 export async function closeBoomkatSession(): Promise<void> {
   try {
     await fetch(`${PROXY_BASE}/__session/close`, { method: "POST" });

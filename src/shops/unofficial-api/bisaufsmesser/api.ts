@@ -1,8 +1,10 @@
-// Bis Aufs Messer (bisaufsmesser.com) — läuft auf Shopify.
-// Verifiziert per Recon: GET /search/suggest.json?q=<titel>&resources[type]=product
-// liefert resources.results.products[] inkl. available (Boolean) und price.
-// Öffentlicher Shopify-Storefront-Endpoint, kein Login nötig.
-const PROXY_BASE = "/proxy/bisaufsmesser";
+import { proxyBase } from "../../../lib/proxyBase";
+
+// Bis Aufs Messer (bisaufsmesser.com) — runs on Shopify.
+// Verified by recon: GET /search/suggest.json?q=<title>&resources[type]=product
+// returns resources.results.products[] including available (boolean) and price.
+// Public Shopify Storefront endpoint, no login needed.
+const PROXY_BASE = proxyBase("bisaufsmesser");
 
 export interface ShopifySuggestProduct {
   title: string;
@@ -11,9 +13,9 @@ export interface ShopifySuggestProduct {
   available: boolean;
   vendor?: string;
   image?: string;
-  // Shopify-Produkttyp, z.B. "Vinyl", "Tapes" — verifiziert per Recon als
-  // zuverlässiges Format-Signal (fehlte vorher in unserem Type, obwohl die
-  // API es liefert -> Format-Feld war bisher immer leer).
+  // Shopify product type, e.g. "Vinyl", "Tapes" — verified by recon as a
+  // reliable format signal (was missing from our type before even though the
+  // API returns it -> the format field was always empty until now).
   type?: string;
   tags?: string[];
 }

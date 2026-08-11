@@ -1,8 +1,8 @@
 #!/bin/zsh
 #
-# Analog zu docker-cleanup.sh im konzert-guide-Projekt: schlankes Gegenstück
-# zu docker-cleanup-R.sh -- stoppt nur die Container und räumt Docker-
-# Altlasten auf, baut/startet aber nichts neu.
+# Analogous to docker-cleanup.sh in the konzert-guide project: the slim
+# counterpart to docker-cleanup-R.sh -- only stops the containers and clears
+# out Docker leftovers, but does not rebuild or restart anything.
 
 set -e
 

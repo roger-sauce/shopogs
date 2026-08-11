@@ -1,16 +1,16 @@
 import type { AvailabilityResult, AvailabilityStatus } from "../../../types/shop";
 
-// Die Produktseite enthält ein <script type="application/ld+json"> mit
-// einem schema.org-Product-Objekt -- jedes Format (MP3/FLAC/WAV/Vinyl/...)
-// ist ein eigenes "Offer" mit Name/Preis/Währung/Verfügbarkeit. Deutlich
-// robuster als CSS-Klassen zu scrapen, und liefert alle Formate in einem
-// Rutsch statt separater in-stock/out-of-stock-Seitenaufrufe wie in der
-// alten (inzwischen überholten) Recon.
+// The product page contains a <script type="application/ld+json"> with a
+// schema.org Product object -- every format (MP3/FLAC/WAV/Vinyl/...) is its
+// own "Offer" with name/price/currency/availability. Considerably more
+// robust than scraping CSS classes, and it delivers all formats in one go
+// instead of separate in-stock/out-of-stock page requests as in the old
+// (by now outdated) Recon.
 interface BoomkatOffer {
   name?: string;
   price?: number;
   priceCurrency?: string;
-  /** schema.org-URL, z.B. "https://schema.org/InStock" */
+  /** schema.org URL, e.g. "https://schema.org/InStock" */
   availability?: string;
   url?: string;
 }
@@ -25,13 +25,13 @@ const STATUS_BY_AVAILABILITY: Partial<Record<string, AvailabilityStatus>> = {
   "https://schema.org/InStock": "in_stock",
   "https://schema.org/PreOrder": "preorder",
   "https://schema.org/LimitedAvailability": "last_copy",
-  // Andere Werte (z.B. OutOfStock, Discontinued) -> bewusst kein Eintrag,
-  // also kein Treffer (siehe unten).
+  // Other values (e.g. OutOfStock, Discontinued) -> deliberately no entry,
+  // so no hit (see below).
 };
 
-// "MP3 Release" -> "MP3", "FLAC Release" -> "FLAC" usw. -- "Limited Edition
-// LP" hat keinen solchen Suffix und bleibt unverändert (classifyFormat
-// erkennt "LP" als Teilstring ohnehin).
+// "MP3 Release" -> "MP3", "FLAC Release" -> "FLAC" etc. -- "Limited Edition
+// LP" has no such suffix and stays unchanged (classifyFormat recognises
+// "LP" as a substring anyway).
 function cleanFormatName(name: string | undefined): string | undefined {
   return name?.replace(/\s+Release$/i, "").trim();
 }
@@ -56,7 +56,7 @@ export function transformBoomkatProductPage(
   const offers = data.offers ?? [];
   return offers.flatMap((offer) => {
     const status = offer.availability ? STATUS_BY_AVAILABILITY[offer.availability] : undefined;
-    if (!status) return []; // ausverkauft / unbekannter Status -> kein Treffer
+    if (!status) return []; // sold out / unknown status -> no hit
 
     return [
       {
@@ -73,10 +73,10 @@ export function transformBoomkatProductPage(
   });
 }
 
-// Ein Eintrag aus der Artist-Übersichtsseite /artists/<slug> -- Artist,
-// Titel und Produktlink direkt aus dem Grid-Markup (li.product_item),
-// keine Stock-Info (die holt sich checkAvailability separat über die
-// Produktseite, wie bei den Autocomplete-Treffern auch).
+// One entry from the artist overview page /artists/<slug> -- artist, title
+// and product link straight out of the grid markup (li.product_item), no
+// stock info (checkAvailability fetches that separately via the product
+// page, just as it does for the autocomplete hits).
 export interface BoomkatArtistPageEntry {
   artist: string;
   title: string;
@@ -104,11 +104,11 @@ export function parseBoomkatArtistPage(html: string): BoomkatArtistPageEntry[] {
   });
 }
 
-// Zählt die eindeutigen Produkt-Links auf einer Label-Übersichtsseite
-// (/labels/<slug>). Auf href statt li.product_item gezählt, weil ein
-// Release theoretisch mehrfach im Grid auftauchen könnte (z.B. Vinyl +
-// Digital als getrennte Kacheln) -- ein Set auf den Produkt-Pfad dedupliziert
-// das zu einer Release-Anzahl.
+// Counts the distinct product links on a label overview page
+// (/labels/<slug>). Counted on href rather than li.product_item, because a
+// release could in theory appear several times in the grid (e.g. vinyl +
+// digital as separate tiles) -- a Set over the product path deduplicates
+// that back to a release count.
 export function countBoomkatLabelProducts(html: string): number {
   const doc = new DOMParser().parseFromString(html, "text/html");
   const hrefs = Array.from(doc.querySelectorAll('a[href*="/products/"]'))

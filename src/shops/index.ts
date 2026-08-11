@@ -9,9 +9,9 @@ import souffleContinu from "./unofficial-api/soufflecontinu";
 import jpc from "./scraping/jpc";
 import boomkat from "./scraping/boomkat";
 
-// Boomkat war länger entfernt (direkter Reverse-Proxy wurde zuverlässig mit
-// HTTP 403 geblockt, vermutlich TLS-/Bot-Fingerprinting) -- läuft jetzt wie
-// HHV über den Browser-Sidecar (volle Camoufox-Navigation), siehe
+// Boomkat was removed for a while (a direct reverse proxy was reliably
+// blocked with HTTP 403, presumably TLS/bot fingerprinting) -- it now runs
+// through the browser sidecar like HHV (full Camoufox navigation), see
 // scraping/boomkat/api.ts.
 export const shops: ShopAdapter[] = [
   hardWax,

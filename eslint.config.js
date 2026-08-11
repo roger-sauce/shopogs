@@ -4,19 +4,19 @@ import security from "eslint-plugin-security";
 import noUnsanitized from "eslint-plugin-no-unsanitized";
 import globals from "globals";
 
-// Getrennte Regel-Blöcke für Browser-Code (src/**, die React/Vite-App) und
-// Node-Code (sidecar/**, vite.config.ts) -- analog zum Konzert-Guide-Ansatz
-// (siehe dessen SECURITY_TOOLING.md), weil beide unterschiedliche
-// Global-Objekte und Risiko-Profile haben: Browser-Code muss vor allem gegen
-// XSS/DOM-Injection abgesichert sein (daher no-unsanitized), der Sidecar
-// gegen z.B. Command-/Path-Injection (daher die zusätzlichen
-// security/detect-*-Regeln zu fs/child_process im Node-Block).
+// Separate rule blocks for browser code (src/**, the React/Vite app) and Node
+// code (sidecar/**, vite.config.ts) -- following the konzert-guide approach
+// (see its SECURITY_TOOLING.md), because the two have different global
+// objects and risk profiles: browser code has to be secured above all against
+// XSS/DOM injection (hence no-unsanitized), the sidecar against e.g.
+// command/path injection (hence the additional security/detect-* rules for
+// fs/child_process in the Node block).
 export default tseslint.config(
   {
     ignores: ["dist/**", "node_modules/**", "sidecar/node_modules/**"],
   },
 
-  // Browser-Code: die React/Vite-App selbst.
+  // Browser code: the React/Vite app itself.
   {
     files: ["src/**/*.{ts,tsx}"],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
@@ -37,8 +37,8 @@ export default tseslint.config(
     },
   },
 
-  // Node-Code: Vite-Config läuft im Node-Kontext des Dev-Servers, nicht im
-  // Browser (Zugriff auf process, __dirname-Äquivalente etc.).
+  // Node code: the Vite config runs in the Node context of the dev server, not
+  // in the browser (access to process, __dirname equivalents etc.).
   {
     files: ["vite.config.ts"],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
@@ -55,8 +55,8 @@ export default tseslint.config(
     },
   },
 
-  // Node-Code: Browser-Sidecar (Express/Camoufox, CommonJS) -- läuft als
-  // eigenständiger Container, hat mit dem Browser-Code der App nichts zu tun.
+  // Node code: browser sidecar (Express/Camoufox, CommonJS) -- runs as a
+  // standalone container, has nothing to do with the app's browser code.
   {
     files: ["sidecar/src/**/*.js", "sidecar/scripts/**/*.js"],
     extends: [js.configs.recommended],

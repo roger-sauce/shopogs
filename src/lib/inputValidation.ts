@@ -1,18 +1,19 @@
-// Eingabe-Validierung für die Such-Textfelder (Artist/Titel). Ziel ist
-// weniger klassische Code-Injection -- die Query landet nirgends in SQL oder
-// Server-seitigem Code, und jede der 8 Shop-Adapter kodiert sie bereits per
-// encodeURIComponent() in die jeweilige URL -- sondern kaputte/übergroße
-// Eingaben früh abzufangen, bevor sie an 8 verschiedene Shop-APIs und den
-// Browser-Sidecar (echte Camoufox-Seitennavigation!) rausgehen.
+// Input validation for the search text fields (artist/title). The goal is
+// less classic code injection -- the query never ends up in SQL or in
+// server-side code, and each of the 8 shop adapters already encodes it with
+// encodeURIComponent() into the respective URL -- than catching broken/
+// oversized input early, before it goes out to 8 different shop APIs and the
+// browser sidecar (real Camoufox page navigation!).
 
-// 100 Zeichen sind für Künstler-/Album-Titel weit mehr als genug (auch für
-// lange Klassik-Titel), verhindert aber z.B. versehentlich/absichtlich
-// eingefügte Textblöcke, die an alle Shops gleichzeitig rausgehen würden.
+// 100 characters are far more than enough for artist/album titles (even for
+// long classical titles), but it prevents e.g. accidentally/deliberately
+// pasted blocks of text that would go out to all shops at the same time.
 const MAX_SEARCH_TERM_LENGTH = 100;
 
-// Steuerzeichen (u.a. NUL, ESC, sonstige C0/DEL-Zeichen) haben in einem
-// Künstler-/Titel-Feld keine legitime Bedeutung -- rausfiltern, statt sie
-// unverändert in State, URLs oder an den Browser-Sidecar durchzureichen.
+// Control characters (NUL, ESC and other C0/DEL characters among them) have
+// no legitimate meaning in an artist/title field -- filter them out instead
+// of passing them through unchanged into state, URLs or to the browser
+// sidecar.
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\x00-\x1f\x7f]/g;
 

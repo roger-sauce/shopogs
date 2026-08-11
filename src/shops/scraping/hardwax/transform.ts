@@ -1,40 +1,40 @@
 import type { AvailabilityResult } from "../../../types/shop";
 
-// Hard Wax nutzt gehashte/generierte CSS-Klassennamen (z.B. "co", "cq", "px"),
-// die sich mit jedem Deploy ändern können — deshalb wird hier bewusst NICHT
-// auf Klassennamen selektiert, sondern auf stabile Tag-Struktur (article/h2)
-// und Text-Muster (Format + Preis, z.B. `LP € 23`).
+// Hard Wax uses hashed/generated CSS class names (e.g. "co", "cq", "px")
+// that can change with every deploy — which is why selection here is
+// deliberately NOT done on class names, but on stable tag structure
+// (article/h2) and text patterns (format + price, e.g. `LP € 23`).
 //
-// Korrektur (Bugfix): "Artist: Titel" steht im <h2> (zwei <span>s, die
-// gematchte Suchbegriffe einzeln in <b> wrappen, z.B.
+// Correction (Bugfix): "Artist: Title" lives in the <h2> (two <span>s that
+// wrap matched search terms individually in <b>, e.g.
 // `<h2><span><a>...<b>Rhythm</b> & <b>Sound</b>...:</a></span>
-// <span>...<b>Music</b>...</span></h2>` — textContent flacht das trotzdem zu
-// "Rhythm & Sound w/ Paul St. Hilaire: Music A Fe Rule" ab). Der erste <p> im
-// Artikel ist nur die Kurzbeschreibung (z.B. "Deadly Dub-Stepper") — das
-// wurde ursprünglich fälschlich als Artist/Titel-Quelle ausgelesen, wodurch
-// jeder Treffer mit Beschreibungstext (praktisch alle) nie den echten
-// Artist/Titel lieferte bzw. bei fehlendem ":" in der Beschreibung sogar
-// unter falschem Titel lief.
-// Korrektur (5. Recon-Runde, Bugfix): Format/Preis NICHT mehr per Regex über
-// den gesamten Artikel-Text ziehen — bei Releases mit mehreren Formaten (LP +
-// Download-Bundle + einzeln kaufbare Tracks) hängt textContent alles ohne
-// Trennzeichen aneinander, das ergab kaputte Format-Strings wie
-// `12"MP3AIFF12"` und teils falsche Preise (Ziffern aus benachbarten Preisen
-// wurden mitgematcht).
-// Stattdessen: jeder Kaufen-Button (`a.qa`, "add to order") ist EIN
-// bestellbares Format mit sauberem, isoliertem Inhalt:
-//   - eigener textContent: `12" € 12`, `2 AIFFs € 3.5`, `AIFF € 1.75`, ...
-//   - title-Attribut: `add "<Titel>" (<Format>) to your order` — bei
-//     Einzeltrack-Downloads steht hier der Track-Titel (z.B. "... Part 1"),
-//     nicht der Release-Titel.
-// Ziffern-Wiederholungen bewusst auf {1,6}/{1,2} begrenzt (statt [\d]+) --
-// keine reale ReDoS-Lücke: (.+?) ist nicht-gierig und läuft gegen einen
-// festen Literal-Anker (€), das ist linear, kein verschachteltes/mehrdeutiges
-// Backtracking wie bei klassischen catastrophic-backtracking-Mustern
-// ((a+)+ o.ä.). Die security/detect-unsafe-regex-Heuristik zählt aber
-// schlicht Quantifier-Konstrukte, unabhängig davon -- bei so kurzen, festen
-// Button-Texten (z.B. `12" € 12`) bewusst unterdrückt statt den Regex weiter
-// zu verbiegen.
+// <span>...<b>Music</b>...</span></h2>` — textContent flattens that to
+// "Rhythm & Sound w/ Paul St. Hilaire: Music A Fe Rule" anyway). The first
+// <p> in the article is only the short description (e.g. "Deadly
+// Dub-Stepper") — that was originally read out as the artist/title source
+// by mistake, so that every hit with description text (practically all of
+// them) never returned the real artist/title, or, when the description had
+// no ":", even ran under a wrong title.
+// Correction (5th recon round, Bugfix): do NOT pull format/price via regex
+// over the entire article text any more — for releases with several formats
+// (LP + download bundle + individually purchasable tracks) textContent
+// concatenates everything without separators, which produced broken format
+// strings like `12"MP3AIFF12"` and partly wrong prices (digits from
+// neighbouring prices were matched along).
+// Instead: every buy button (`a.qa`, "add to order") is ONE orderable
+// format with clean, isolated content:
+//   - its own textContent: `12" € 12`, `2 AIFFs € 3.5`, `AIFF € 1.75`, ...
+//   - title attribute: `add "<Title>" (<Format>) to your order` — for
+//     single-track downloads this holds the track title (e.g. "... Part 1"),
+//     not the release title.
+// Digit repetitions deliberately limited to {1,6}/{1,2} (instead of [\d]+) --
+// no real ReDoS hole: (.+?) is non-greedy and runs against a fixed literal
+// anchor (€), which is linear, not the nested/ambiguous backtracking of the
+// classic catastrophic-backtracking patterns ((a+)+ and the like). The
+// security/detect-unsafe-regex heuristic simply counts quantifier
+// constructs regardless of that -- for such short, fixed button texts (e.g.
+// `12" € 12`) deliberately suppressed instead of contorting the regex
+// further.
 // eslint-disable-next-line security/detect-unsafe-regex
 const BUY_BUTTON_RE = /^(.+?)\s*€\s*(\d{1,6}(?:[.,]\d{1,2})?)$/;
 const BUY_BUTTON_TITLE_RE = /^add\s+[“"](.+)[”"]\s*\(/;
@@ -61,8 +61,8 @@ export function transformHardWax(html: string): AvailabilityResult[] {
     const buyButtons = Array.from(article.querySelectorAll("a.qa"));
 
     if (buyButtons.length === 0) {
-      // Kein Kaufen-Button gefunden (z.B. reiner Info-Eintrag) — trotzdem als
-      // Treffer aufnehmen, da Hard Wax nur verfügbare Artikel listet.
+      // No buy button found (e.g. a pure info entry) — still record it as a
+      // hit, since Hard Wax only lists available articles.
       results.push({ shopId: "hard-wax", title: releaseTitle, artist, url, status: "in_stock" });
       continue;
     }
@@ -75,9 +75,9 @@ export function transformHardWax(html: string): AvailabilityResult[] {
       const titleAttr = btn.getAttribute("title") ?? "";
       const titleMatch = titleAttr.match(BUY_BUTTON_TITLE_RE);
       const rawItemTitle = titleMatch ? titleMatch[1] : releaseTitle;
-      // Bei Einzeltrack-Downloads steht im title-Attribut "Artist: Track" —
-      // den Artist-Präfix wieder abschneiden, sonst taucht er doppelt auf
-      // (einmal als artist-Feld, einmal im title-Text).
+      // For single-track downloads the title attribute holds "Artist: Track"
+      // — strip the artist prefix off again, otherwise it shows up twice
+      // (once as the artist field, once in the title text).
       const itemTitle =
         artist && rawItemTitle.startsWith(`${artist}:`)
           ? rawItemTitle.slice(artist.length + 1).trim()
@@ -91,10 +91,10 @@ export function transformHardWax(html: string): AvailabilityResult[] {
         price: priceMatch[2],
         currency: "EUR",
         url,
-        // Hard Wax listet nur Formate, die gerade lieferbar sind — ein
-        // Kaufen-Button hier bedeutet also: auf Lager. Kein Preorder-Konzept
-        // beobachtet (Recon: nur "out of stock" pro Format, kein Vorbestell-
-        // Badge).
+        // Hard Wax only lists formats that are currently deliverable — a buy
+        // button here therefore means: in stock. No preorder concept
+        // observed (recon: only "out of stock" per format, no preorder
+        // badge).
         status: "in_stock",
       });
     }
@@ -103,10 +103,9 @@ export function transformHardWax(html: string): AvailabilityResult[] {
   return results;
 }
 
-// Zählt die Treffer auf einer Label-Seite (/label/<slug>/). Verifiziert per
-// Recon: Treffer stecken wie in der normalen Suche in <article>-Elementen;
-// ein nicht existierendes/leeres Label zeigt stattdessen den Text
-// "No results." an.
+// Counts the hits on a label page (/label/<slug>/). Verified by recon: hits
+// sit in <article> elements just like in the normal search; a
+// non-existent/empty label shows the text "No results." instead.
 export function countHardWaxLabelArticles(html: string): number {
   const doc = new DOMParser().parseFromString(html, "text/html");
   if (/No results\./i.test(doc.body?.textContent ?? "")) return 0;

@@ -3,25 +3,26 @@ function escapeRegExp(s: string): string {
 }
 
 /**
- * Prüft, ob JEDES Wort aus `query` als GANZES Wort in `candidate` vorkommt
- * (Wortgrenzen via \b). Erlaubt weiterhin Fragment-Suche über mehrere Wörter
- * (z.B. Query "Ambient Works" matcht Titel "Selected Ambient Works Volume
- * II"), verhindert aber Substring-Fehltreffer: manche Shop-Suchen (verifiziert
- * bei SoundOhm & Souffle Continu) matchen "lose" per Substring, sodass eine
- * Suche nach "Memoria" (Carmen Villain) auch "Memorial", "In Memoriam" o.ä.
- * zurückgibt — "Memoria" ist ja tatsächlich literal in "Memorial" enthalten,
- * ein einfacher .includes()-Check hätte das nicht abgefangen.
+ * Checks whether EVERY word from `query` occurs as a WHOLE word in
+ * `candidate` (word boundaries via \b). Still allows fragment search across
+ * several words (e.g. query "Ambient Works" matches the title "Selected
+ * Ambient Works Volume II"), but prevents substring false hits: some shop
+ * searches (verified at SoundOhm & Souffle Continu) match "loosely" by
+ * substring, so a search for "Memoria" (Carmen Villain) also returns
+ * "Memorial", "In Memoriam" and the like — "Memoria" really is contained
+ * literally in "Memorial", a simple .includes() check would not have caught
+ * that.
  *
- * Bugfix: Tokens werden vor dem \b-Check um führende/nachgestellte
- * Satzzeichen bereinigt (z.B. "(9CD" -> "9CD", ein alleinstehendes "-" ->
- * "" -> verworfen). Ohne das scheiterte \b bei Tokens, die mit einem
- * Nicht-Wortzeichen beginnen/enden: \b markiert nur den Übergang zwischen
- * Wort- und Nicht-Wortzeichen -- steht ein Token wie "-" komplett zwischen
- * zwei Nicht-Wortzeichen (Leerzeichen davor UND danach), gibt es dort gar
- * keinen Übergang, das Token konnte also NIE matchen. Live beobachtet: den
- * vollständigen Titel-Vorschlag "... Volume 1 - 9 (9CD Box)" auswählen fand
- * nirgends Treffer, obwohl der Titel exakt so im Shop stand -- an "-" und
- * "(9CD" ist der Match gescheitert, nicht am eigentlichen Titeltext.
+ * Bugfix: before the \b check, tokens are stripped of leading/trailing
+ * punctuation (e.g. "(9CD" -> "9CD", a standalone "-" -> "" -> discarded).
+ * Without that, \b failed on tokens that begin/end with a non-word
+ * character: \b only marks the transition between word and non-word
+ * characters -- if a token like "-" sits entirely between two non-word
+ * characters (a space before AND after), there is no transition there at
+ * all, so the token could NEVER match. Observed live: selecting the full
+ * title suggestion "... Volume 1 - 9 (9CD Box)" found no hits anywhere,
+ * even though the title was in the shop exactly like that -- the match
+ * failed on "-" and "(9CD", not on the actual title text.
  */
 export function matchesQueryWords(candidate: string | undefined, query: string): boolean {
   if (!candidate) return false;
@@ -31,8 +32,9 @@ export function matchesQueryWords(candidate: string | undefined, query: string):
     .map((w) => w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ""))
     .filter(Boolean);
   if (words.length === 0) return true;
-  // w ist vor dem Einbau in die RegExp bereits per escapeRegExp() escaped --
-  // kein Regex-Injection-Risiko, auch wenn `query` aus Nutzereingaben stammt.
+  // w is already escaped via escapeRegExp() before it is built into the
+  // RegExp -- no regex injection risk, even though `query` comes from user
+  // input.
   // eslint-disable-next-line security/detect-non-literal-regexp
   return words.every((w) => new RegExp(`\\b${escapeRegExp(w)}\\b`, "iu").test(candidate));
 }

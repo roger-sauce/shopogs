@@ -1,55 +1,55 @@
-// Browser-Sidecar: löst Bot-Schutz per Camoufox-Browser-Navigation statt
-// Cookie-Harvest-und-Replay (siehe browserSession.js). Generisch für mehrere
-// Shops -- aktuell HHV und Boomkat, siehe SHOP_CONFIG dort. nginx leitet
-// /proxy/<shop>/* hierher um, statt direkt an den echten Shop.
+// Browser sidecar: solves bot protection via Camoufox browser navigation
+// instead of cookie harvest and replay (see browserSession.js). Generic for
+// several shops -- currently HHV and Boomkat, see SHOP_CONFIG there. nginx
+// routes /proxy/<shop>/* here instead of directly to the real shop.
 //
-// Ablauf pro Request:
-//   1) Je nach Pfad entweder navigateAndGetHtml (echte Vollnavigation --
-//      für Seiten, deren Bot-Schutz nur bei echter Navigation aufgelöst
-//      wird) oder fetchViaBrowser (fetch() aus der Seite heraus -- für
-//      AJAX-Endpunkte, die auch die echte Seite so nachlädt). Session wird
-//      bei Bedarf neu aufgebaut.
-//   2) Sieht die Antwort nach Block/Challenge aus (HTTP-Status oder bei
-//      HTML-Seiten ungewöhnlich kleiner Body), Session invalidieren und
-//      EINMAL neu versuchen (mit frischer Session).
+// Sequence per request:
+//   1) Depending on the path either navigateAndGetHtml (real full
+//      navigation -- for pages whose bot protection is only resolved on a
+//      real navigation) or fetchViaBrowser (fetch() from inside the page --
+//      for AJAX endpoints that the real page loads that way too). The
+//      session is rebuilt if needed.
+//   2) If the response looks like a block/challenge (HTTP status, or for
+//      HTML pages an unusually small body), invalidate the session and
+//      retry ONCE (with a fresh session).
 //
-// Lifecycle: das Frontend ruft nach jeder abgeschlossenen Suche
-// POST /proxy/<shop>/__session/close auf (siehe hhv/boomkat api.ts), damit
-// der Browser-Prozess sofort wieder verschwindet statt bis zum Idle-Timeout
-// offen zu bleiben -- bei wenig parallelen Suchen lohnt sich Dauerbetrieb
-// nicht.
+// Lifecycle: after every completed search the frontend calls
+// POST /proxy/<shop>/__session/close (see hhv/boomkat api.ts) so that the
+// browser process disappears again immediately instead of staying open
+// until the idle timeout -- with few parallel searches continuous operation
+// is not worth it.
 const express = require("express");
 const { navigateAndGetHtml, fetchViaBrowser, invalidateSession, isAjaxPath } = require("./browserSession");
 
 const PORT = process.env.PORT || 3001;
 
 function looksLikeChallenge(result, isAjax) {
-  // 404 ist eine echte Antwort, kein Block: Die Seite existiert nicht. Der
-  // Sidecar meldet das seit dem 04.08.2026 selbst so, wenn eine Navigation
-  // mit NS_BINDING_ABORTED abbricht -- bei Boomkat der Fall, wenn die
-  // Autocomplete-Schnittstelle einen Produktlink zu einer nicht vorhandenen
-  // Platte liefert. Ein Wiederholungsversuch mit frischer Session waere hier
-  // reine Zeitverschwendung, das Ergebnis bliebe dasselbe.
+  // 404 is a real answer, not a block: the page does not exist. Since
+  // 04.08.2026 the sidecar reports it that way itself when a navigation
+  // aborts with NS_BINDING_ABORTED -- the case with Boomkat when the
+  // autocomplete interface returns a product link to a record that is not
+  // there. A retry with a fresh session would be pure waste of time here,
+  // the result would stay the same.
   if (result.status === 404) return false;
-  // Sonstiger HTTP-Fehlerstatus ist ein generisches Blockiert-Signal (z.B.
-  // Boomkats HTTP 403 bei TLS-/Bot-Fingerprinting) -- unabhängig vom
-  // Endpunkt-Typ.
+  // Any other HTTP error status is a generic blocked signal (e.g. Boomkat's
+  // HTTP 403 on TLS-/bot fingerprinting) -- independent of the endpoint
+  // type.
   if (result.status >= 400) return true;
-  // AJAX/JSON-Antworten dürfen legitim kurz sein (z.B. 0 Autocomplete-
-  // Treffer) -- kein Größen-Check, sonst False Positives.
+  // AJAX/JSON responses may legitimately be short (e.g. 0 autocomplete
+  // hits) -- no size check, otherwise false positives.
   if (isAjax) return false;
-  // Laut RECON.md liefert HHVs Challenge-Seite HTTP 200 mit ~1.9 KB
-  // obfuskiertem JS statt echtem HTML -- reicht als grobe Heuristik für
-  // Vollnavigations-Seiten.
+  // According to RECON.md HHV's challenge page returns HTTP 200 with ~1.9 KB
+  // of obfuscated JS instead of real HTML -- good enough as a rough
+  // heuristic for full-navigation pages.
   return !result.contentType || !result.contentType.includes("text/html") || result.body.length < 5000;
 }
 
 const app = express();
 
-// Muss VOR der generischen "/proxy/:shop/*"-Route registriert werden, sonst
-// würde Express sie nie erreichen -- die Wildcard-Route unten würde
-// "__session/close" sonst als (unsinnigen) Shop-Pfad interpretieren und
-// weiterreichen.
+// Must be registered BEFORE the generic "/proxy/:shop/*" route, otherwise
+// Express would never reach it -- the wildcard route below would otherwise
+// interpret "__session/close" as a (nonsensical) shop path and pass it
+// through.
 app.post("/proxy/:shop/__session/close", async (req, res) => {
   await invalidateSession(req.params.shop);
   res.status(204).end();
@@ -57,12 +57,12 @@ app.post("/proxy/:shop/__session/close", async (req, res) => {
 
 app.all("/proxy/:shop/*", async (req, res) => {
   const { shop } = req.params;
-  // Reines String-Prefix-Stripping statt new RegExp(`^/proxy/${shop}`) --
-  // `shop` kommt direkt aus der URL (attacker-kontrolliert) und würde sonst
-  // ungeprüft in ein Regex-Pattern eingebaut (z.B. Sonderzeichen wie "."
-  // oder "*" in einem Shop-Namen hätten unbeabsichtigte Regex-Semantik statt
-  // literal zu matchen). Ein einfacher startsWith/slice braucht kein Escaping
-  // und ist obendrein günstiger.
+  // Plain string prefix stripping instead of new RegExp(`^/proxy/${shop}`) --
+  // `shop` comes straight from the URL (attacker-controlled) and would
+  // otherwise be built unchecked into a regex pattern (e.g. special
+  // characters like "." or "*" in a shop name would have unintended regex
+  // semantics instead of matching literally). A simple startsWith/slice
+  // needs no escaping and is cheaper on top of that.
   const proxyPrefix = `/proxy/${shop}`;
   const upstreamPath = req.originalUrl.startsWith(proxyPrefix)
     ? req.originalUrl.slice(proxyPrefix.length)

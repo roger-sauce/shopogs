@@ -1,14 +1,14 @@
 import { defineConfig, type ProxyOptions } from "vite";
 import react from "@vitejs/plugin-react";
 
-// Alle Ziel-Shops senden keine CORS-Header für Browser-Fetches. Im Dev-Server
-// laufen die Adapter deshalb über einen lokalen Proxy-Pfad (/proxy/<shop>),
-// der die Anfrage serverseitig an den echten Shop weiterreicht.
+// None of the target shops send CORS headers for browser fetches. In the dev
+// server the adapters therefore run through a local proxy path (/proxy/<shop>)
+// which forwards the request server-side to the real shop.
 //
-// WICHTIG für Produktion (z.B. Deploy auf der QNAP-NAS): dieser Proxy existiert
-// nur im Vite-Dev-Server. Im Produktivbetrieb braucht es ein Äquivalent, z.B.
-// einen nginx-Reverse-Proxy mit denselben Pfaden (siehe Konzert-Guide-Ansatz
-// für hr2: PROXY_BASE + nginx setzt Host/UA/proxy_ssl_server_name).
+// IMPORTANT for production (e.g. deploying on the QNAP NAS): this proxy only
+// exists in the Vite dev server. In production an equivalent is needed, e.g.
+// an nginx reverse proxy with the same paths (see the konzert-guide approach
+// for hr2: PROXY_BASE + nginx sets Host/UA/proxy_ssl_server_name).
 const shopTargets: Record<string, string> = {
   "/proxy/hardwax": "https://hardwax.com",
   "/proxy/hhv": "http://localhost:3001",
@@ -20,25 +20,25 @@ const shopTargets: Record<string, string> = {
   "/proxy/jpc": "https://www.jpc.de",
 };
 
-// HHV und Boomkat laufen über den Browser-Sidecar (siehe RECON.md,
-// "Playwright Session-Relay für HHV") statt direkt gegen den echten Shop.
-// Der Sidecar erwartet den vollen Pfad INKLUSIVE /proxy/<shop>-Prefix (genau
-// wie nginx.conf ihn im Docker-Setup weiterreicht) und baut seine eigenen
-// Browser-Header selbst -- deshalb dafür bewusst kein Rewrite/Header-Spoofing.
+// HHV and Boomkat go through the browser sidecar (see RECON.md, "Playwright
+// Session-Relay für HHV") instead of straight to the real shop. The sidecar
+// expects the full path INCLUDING the /proxy/<shop> prefix (exactly as
+// nginx.conf forwards it in the Docker setup) and builds its own browser
+// headers itself -- hence deliberately no rewrite/header spoofing for these.
 const SIDECAR_PATHS = ["/proxy/hhv", "/proxy/boomkat"];
 
-// Manche Shops blocken Requests, deren Referer/User-Agent nicht wie ein
-// normaler Browser-Aufruf direkt von der eigenen Domain aussieht. Der
-// Vite-Proxy reicht standardmäßig den Referer des Dev-Servers (z.B.
-// http://localhost:5173/...) durch, was wie ein Fremd-Request wirkt —
-// deshalb hier pro Ziel überschreiben.
+// Some shops block requests whose Referer/User-Agent does not look like a
+// normal browser call coming directly from their own domain. By default the
+// Vite proxy passes through the dev server's Referer (e.g.
+// http://localhost:5173/...), which looks like a cross-site request —
+// therefore override it here per target.
 //
-// (Boomkat lief früher genau hierüber und wurde deshalb komplett entfernt:
-// selbst mit vollständigem Header-Set blieb dort ein HTTP 403 bestehen —
-// vermutlich TLS-/Bot-Fingerprinting, das ein simpler Node-Reverse-Proxy
-// nicht imitieren kann. Boomkat läuft jetzt über den Browser-Sidecar
-// (SIDECAR_PATHS oben), der Proxy-Header-Fix hier bleibt für die anderen,
-// direkt erreichbaren Shops sinnvoll.)
+// (Boomkat used to run exactly through this and was removed completely
+// because of it: even with the full header set an HTTP 403 persisted there —
+// presumably TLS/bot fingerprinting that a plain Node reverse proxy cannot
+// imitate. Boomkat now goes through the browser sidecar (SIDECAR_PATHS
+// above); the proxy header fix here still makes sense for the other shops,
+// which are reachable directly.)
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
@@ -65,10 +65,10 @@ const proxy: Record<string, ProxyOptions> = Object.fromEntries(
         target,
         changeOrigin: true,
         secure: true,
-        // Reines String-Prefix-Stripping statt new RegExp(`^${path}`) -- kein
-        // Injection-Risiko hier (path kommt aus lokal hardcodierten Keys),
-        // aber so bleibt der Pattern gleich wie in sidecar/src/server.js für
-        // den echten, attacker-kontrollierten Fall.
+        // Plain string prefix stripping instead of new RegExp(`^${path}`) --
+        // no injection risk here (path comes from locally hardcoded keys),
+        // but this keeps the pattern the same as in sidecar/src/server.js for
+        // the real, attacker-controlled case.
         rewrite: (p: string) => (p.startsWith(path) ? p.slice(path.length) : p),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         configure: (proxyServer: any) => {

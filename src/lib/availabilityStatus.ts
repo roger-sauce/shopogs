@@ -1,7 +1,7 @@
 import type { AvailabilityStatus } from "../types/shop";
 
-// Einheitliche, shop-übergreifende Beschriftung pro Status. Jeder Adapter
-// übersetzt seine eigenen Rohdaten (siehe RECON.md) in einen dieser 4 Werte.
+// Uniform, shop-independent label per status. Every adapter translates its
+// own raw data (see RECON.md) into one of these 4 values.
 export const STATUS_LABELS: Record<AvailabilityStatus, string> = {
   in_stock: "Auf Lager",
   preorder: "Vorbestellung",
@@ -9,7 +9,7 @@ export const STATUS_LABELS: Record<AvailabilityStatus, string> = {
   last_copy: "Letztes Exemplar",
 };
 
-// Grün für "kann sofort kommen", Amber für "kann dauern".
+// Green for "can ship right away", amber for "may take a while".
 export const STATUS_COLORS: Record<AvailabilityStatus, string> = {
   in_stock: "#7bc87b",
   last_copy: "#7bc87b",

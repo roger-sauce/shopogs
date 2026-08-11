@@ -12,10 +12,10 @@ export interface TitleSuggestion {
   title: string;
 }
 
-// Liefert Vorschläge für den vollständigen Album-Titel, während der Nutzer
-// nur ein Fragment eingibt (z.B. "Ambient Works"). Nutzt alle 6 "schnellen"
-// Shops (nicht HHV -- das würde bei jedem Tastendruck eine eigene
-// Camoufox-Session anwerfen) als Datenquelle.
+// Supplies suggestions for the full album title while the user is only
+// typing a fragment (e.g. "Ambient Works"). Uses all 6 "fast" shops (not
+// HHV -- that would start its own Camoufox session on every keystroke) as
+// the data source.
 export async function fetchTitleSuggestions(query: string): Promise<TitleSuggestion[]> {
   if (query.trim().length < 3) return [];
 
@@ -32,9 +32,9 @@ export async function fetchTitleSuggestions(query: string): Promise<TitleSuggest
   const perShop: TitleSuggestion[][] = [];
 
   if (anostRes.status === "fulfilled") {
-    // ANOSTs Suche liefert releases[] ohne verknüpften Artist-Namen (nur
-    // eine separate, unverknüpfte artists[]-Liste) -- deshalb hier bewusst
-    // kein artist-Feld, statt zu raten.
+    // ANOST's search returns releases[] without a linked artist name (only
+    // a separate, unlinked artists[] list) -- hence deliberately no artist
+    // field here, instead of guessing.
     perShop.push((anostRes.value.releases ?? []).map((release) => ({ title: release.title })));
   }
 
@@ -65,8 +65,8 @@ export async function fetchTitleSuggestions(query: string): Promise<TitleSuggest
     );
   }
 
-  // Hard Wax und JPC liefern serverseitig gerendertes HTML statt JSON --
-  // nutzen dieselben Parser wie die echte Suche (transformHardWax/transformJpc).
+  // Hard Wax and JPC return server-rendered HTML instead of JSON -- use the
+  // same parsers as the real search (transformHardWax/transformJpc).
   if (hardwaxRes.status === "fulfilled") {
     perShop.push(transformHardWax(hardwaxRes.value).map((r) => ({ artist: r.artist, title: r.title })));
   }
@@ -75,13 +75,13 @@ export async function fetchTitleSuggestions(query: string): Promise<TitleSuggest
     perShop.push(transformJpc(jpcRes.value).map((r) => ({ artist: r.artist, title: r.title })));
   }
 
-  // Round-Robin statt shopweise aneinanderhängen: sonst füllt ein Shop mit
-  // vielen (lose gematchten) Treffern allein schon die ganze Liste, bevor
-  // ein anderer Shop überhaupt drankommt (live beobachtet: "People of the
-  // Moon" zeigte den korrekten JPC-Treffer nicht in der Vorschlagsliste,
-  // obwohl JPC ihn bei der echten Suche fand -- er stand in der
-  // Push-Reihenfolge einfach zu weit hinten). So bekommt jeder Shop
-  // mindestens eine faire erste Chance auf einen Listenplatz.
+  // Round-Robin instead of concatenating shop by shop: otherwise a single
+  // shop with many (loosely matched) hits fills the whole list on its own
+  // before another shop gets a turn at all (observed live: "People of the
+  // Moon" did not show the correct JPC hit in the suggestion list, even
+  // though JPC found it in the real search -- it simply sat too far back in
+  // the push order). This way every shop gets at least a fair first chance
+  // at a place in the list.
   const interleaved: TitleSuggestion[] = [];
   let index = 0;
   let more = true;
@@ -89,7 +89,7 @@ export async function fetchTitleSuggestions(query: string): Promise<TitleSuggest
     more = false;
     for (const list of perShop) {
       if (index < list.length) {
-        // index ist ein simpler Schleifenzähler, kein extern kontrollierter Key.
+        // index is a simple loop counter, not an externally controlled key.
         // eslint-disable-next-line security/detect-object-injection
         interleaved.push(list[index]);
         more = true;

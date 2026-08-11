@@ -4,26 +4,32 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: shopogs
-    # Kein ports:-Eintrag mehr. Von aussen kommt der Nginx Proxy Manager ueber
-    # shared-proxy-net (shopogs:80), im Heimnetz der caddy-Container ueber das
-    # Projektnetz -- beide sprechen den Containernamen an, ein Host-Port wird
-    # nirgends gebraucht.
+    # No ports: entry any more. From outside, the Nginx Proxy Manager comes in
+    # via shared-proxy-net (shopogs:80), on the home network the caddy
+    # container via the project network -- both address the container name, a
+    # host port is not needed anywhere.
     restart: unless-stopped
     depends_on:
       - browser-sidecar
+      # nginx resolves the name shopogs-api at startup (see location /api/
+      # in nginx.conf) and does not even start if it does not exist. The
+      # other way round, the API only needs nginx at runtime -- which is why
+      # the dependency exists in this direction only. The reverse would make
+      # it a cycle, and Compose rejects that.
+      - shopogs-api
     networks:
       - default
       - shared-proxy-net
-    # Verhindert Rechteausweitung ueber setuid-Dateien im Container. nginx
-    # ist davon nicht betroffen: der Master startet als root und wechselt per
-    # setuid()-Aufruf auf den nginx-Benutzer -- ein Syscall, kein Ausfuehren
-    # einer setuid-Datei.
+    # Prevents privilege escalation via setuid files in the container. nginx
+    # is not affected by this: the master starts as root and switches to the
+    # nginx user via a setuid() call -- a syscall, not the execution of a
+    # setuid file.
     security_opt:
       - no-new-privileges:true
-    # Alle Faehigkeiten entziehen, nur die vier noetigen zurueckgeben:
-    #   NET_BIND_SERVICE  Port 80 im Container liegt unter 1024
-    #   SETUID / SETGID   Master laeuft als root, Worker als nginx
-    #   CHOWN             das Entrypoint-Skript des Images setzt Eigentuemer
+    # Drop all capabilities, give back only the four that are needed:
+    #   NET_BIND_SERVICE  port 80 in the container is below 1024
+    #   SETUID / SETGID   master runs as root, workers as nginx
+    #   CHOWN             the image's entrypoint script sets ownership
     cap_drop:
       - ALL
     cap_add:
@@ -31,16 +37,50 @@ services:
       - SETUID
       - SETGID
       - CHOWN
-    # Schreibgeschuetztes Wurzeldateisystem, mit drei tmpfs fuer die
-    # Bereiche, in die nginx schreiben muss: /run fuer nginx.pid,
-    # /var/cache/nginx fuer die Proxy-Zwischenspeicher, /tmp fuer
-    # temporaere Dateien. Letzterer ist hier nicht nebensaechlich: die
-    # /proxy/-Locations puffern Antworten der Shops zwischen.
+    # Read-only root filesystem, with three tmpfs for the areas that
+    # nginx has to write to: /run for nginx.pid, /var/cache/nginx for
+    # the proxy caches, /tmp for temporary files. The last one is not
+    # incidental here: the /proxy/ locations buffer the responses from
+    # the shops.
     read_only: true
     tmpfs:
       - /run
       - /tmp
       - /var/cache/nginx
+
+  # The JSON API. Runs the same shop adapters that run in the browser -- only
+  # server-side, so that the iPhone app gets finished hits instead of raw shop
+  # pages. No ports: entry: it is reachable exclusively via nginx (location
+  # /api/), on the Docker network by container name.
+  shopogs-api:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: shopogs-api
+    restart: unless-stopped
+    environment:
+      # Points at the nginx container, NOT directly at the shops: that is
+      # where header spoofing, the TLS server name and the forwarding of HHV
+      # and Boomkat to the sidecar live. Maintaining it twice would mean
+      # getting it wrong twice.
+      SHOPOGS_PROXY_BASE: http://shopogs
+      # Unset = open, like /proxy/ already is today, so that the web app can
+      # reach the API without a login. A value here arms the bearer check
+      # without anything in the code having to be changed.
+      # SHOPOGS_API_KEY: "..."
+    security_opt:
+      - no-new-privileges:true
+    # Node needs no kernel capabilities: no privileged port (3002), no user
+    # switch (the image starts directly as "node"), no network
+    # configuration.
+    cap_drop:
+      - ALL
+    # The process does not have to write anywhere -- it caches nothing and
+    # creates nothing. /tmp stays as a tmpfs because Node writes there when
+    # it needs to.
+    read_only: true
+    tmpfs:
+      - /tmp
 
   browser-sidecar:
     build:
@@ -48,50 +88,49 @@ services:
       dockerfile: Dockerfile
     container_name: browser-sidecar
     restart: unless-stopped
-    # Kein ports:-Eintrag mehr -- der Sidecar wird ausschliesslich von
-    # shopogs ueber das Docker-Netz per Containername angesprochen
-    # (nginx.conf: proxy_pass http://browser-sidecar:3001). Ihn auf dem Host
-    # zu veroeffentlichen hat nur Angriffsflaeche erzeugt: er rendert fremdes
-    # JavaScript und ist damit der exponierteste Teil des Stacks.
+    # No ports: entry any more -- the sidecar is addressed exclusively by
+    # shopogs over the Docker network by container name (nginx.conf:
+    # proxy_pass http://browser-sidecar:3001). Publishing it on the host only
+    # created attack surface: it renders foreign JavaScript and is therefore
+    # the most exposed part of the stack.
     #
-    # Der wichtigste Container fuer diese Option -- und zugleich der mit dem
-    # groessten Restrisiko: Camoufox ist ein gepatchter Firefox, dessen
-    # Sandbox User-Namespaces nutzt. Setuid-Helfer verwendet sie nicht, das
-    # sollte also tragen. Nach dem Setzen unbedingt HHV UND Boomkat suchen --
-    # ein Ausfall zeigt sich hier als leeres Ergebnis, nicht als Absturz.
+    # The most important container for this option -- and at the same time
+    # the one with the largest residual risk: Camoufox is a patched Firefox
+    # whose sandbox uses user namespaces. It does not use setuid helpers, so
+    # this should hold. After setting it, be sure to search HHV AND Boomkat
+    # -- a failure shows up here as an empty result, not as a crash.
     security_opt:
       - no-new-privileges:true
-    # Ein Browser braucht keine Kernel-Faehigkeiten: er bindet keinen
-    # privilegierten Port, wechselt keinen Benutzer und fasst keine
-    # Netzwerkkonfiguration an. Deshalb alle entziehen und keine
-    # zurueckgeben. Falls Camoufox doch nicht startet, waere das an einer
-    # Fehlermeldung im Log erkennbar -- nicht an leeren Suchergebnissen.
+    # A browser needs no kernel capabilities: it binds no privileged port,
+    # switches no user and does not touch any network configuration. So drop
+    # them all and give none back. If Camoufox does not start after all,
+    # that would be recognisable from an error message in the log -- not
+    # from empty search results.
     cap_drop:
       - ALL
-    # Kein Haertungsschritt, sondern Stabilitaet: Firefox legt gemeinsam
-    # genutzte Speicherbereiche in /dev/shm ab, und Dockers Vorgabe von
-    # 64 MB ist dafuer knapp -- Symptom waeren sporadische Abstuerze unter
-    # Last. Der autoplay-pi-Container auf roon-bridge hat das aus demselben
-    # Grund.
+    # Not a hardening step but a matter of stability: Firefox puts shared
+    # memory areas in /dev/shm, and Docker's default of 64 MB is tight for
+    # that -- the symptom would be sporadic crashes under load. The
+    # autoplay-pi container on roon-bridge has this for the same reason.
     shm_size: "1gb"
     #
-    # Offen und bewusst nicht hier geloest: Der Container laeuft als root,
-    # das Dockerfile setzt kein USER. Das Playwright-Image bringt einen
-    # "pwuser" mit -- der Wechsel dorthin waere fuer diesen Container der
-    # wirksamste Schritt, verlangt aber Aenderungen am Dockerfile samt
-    # Eigentuemerrechten an /opt/camoufox und einen vollstaendigen Neubau.
+    # Open and deliberately not solved here: the container runs as root, the
+    # Dockerfile sets no USER. The Playwright image ships a "pwuser" -- for
+    # this container, switching to it would be the most effective step, but
+    # it requires changes to the Dockerfile including ownership of
+    # /opt/camoufox, plus a complete rebuild.
 
-  # TLS-Terminierung fuer den internen Zugriff im Heimnetz. Zertifikat von
-  # der lokalen mkcert-CA, siehe caddy/Caddyfile. Liegt im Docker-Netz des
-  # Projekts und erreicht shopogs ueber den Containernamen -- deshalb braucht
-  # shopogs keinen veroeffentlichten Host-Port mehr.
+  # TLS termination for internal access on the home network. Certificate from
+  # the local mkcert CA, see caddy/Caddyfile. Sits on the project's Docker
+  # network and reaches shopogs by container name -- which is why shopogs no
+  # longer needs a published host port.
   caddy:
     image: caddy:2-alpine
     container_name: shopogs-caddy
     ports:
-      # BIND_ADDR steht in der .env (nicht im Repo) und ist die LAN-Adresse
-      # des Hosts. Der Vorgabewert 127.0.0.1 ist bewusst restriktiv: ein
-      # frischer Klon ohne .env stellt damit nichts versehentlich ins Netz.
+      # BIND_ADDR is set in the .env (not in the repo) and is the host's LAN
+      # address. The default 127.0.0.1 is deliberately restrictive: a fresh
+      # clone without a .env does not accidentally expose anything.
       - "${BIND_ADDR:-127.0.0.1}:5443:5443"
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
@@ -101,15 +140,15 @@ services:
       - shopogs
     security_opt:
       - no-new-privileges:true
-    # NET_BIND_SERVICE wird nicht fuer den Port gebraucht -- 5443 liegt ueber
-    # 1024 -- sondern damit die Binaerdatei startet: das Caddy-Image setzt
-    # "setcap cap_net_bind_service=+ep /usr/bin/caddy". Der Kernel verweigert
-    # execve, wenn eine Datei Faehigkeiten traegt, die nicht im Bounding Set
-    # liegen, und cap_drop: ALL leert dieses Set.
+    # NET_BIND_SERVICE is not needed for the port -- 5443 is above 1024 --
+    # but so that the binary starts at all: the Caddy image sets
+    # "setcap cap_net_bind_service=+ep /usr/bin/caddy". The kernel refuses
+    # execve when a file carries capabilities that are not in the bounding
+    # set, and cap_drop: ALL empties that set.
     #
-    # Ausserdem Voraussetzung: caddy/certs/ gehoert root. Ohne DAC_OVERRIDE
-    # koennte der Container-root den Schluessel mit Rechten 600 sonst nicht
-    # lesen. Zertifikate erneuern geht dadurch nur noch mit sudo.
+    # Also a precondition: caddy/certs/ is owned by root. Without
+    # DAC_OVERRIDE the container root could otherwise not read the key with
+    # mode 600. As a result, renewing certificates only works with sudo.
     cap_drop:
       - ALL
     cap_add:

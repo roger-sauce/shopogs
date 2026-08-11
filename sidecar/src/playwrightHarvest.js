@@ -1,8 +1,8 @@
-// VERALTET -- ersetzt durch browserSession.js (volle Camoufox-
-// Browser-Navigation pro Suche statt Cookie-Harvest-und-Replay; der
-// harvestete Cookie funktionierte nachweislich nicht außerhalb der Browser-
-// Verbindung, die ihn geholt hat, siehe RECON.md).
-// Löschen war im Sandbox-Mount nicht möglich (Operation not permitted),
-// Datei bewusst leer gelassen, damit niemand versehentlich den alten
-// Harvest-Code importiert oder liest.
+// OBSOLETE -- replaced by browserSession.js (full Camoufox browser
+// navigation per search instead of cookie harvest and replay; the
+// harvested cookie demonstrably did not work outside the browser
+// connection that fetched it, see RECON.md).
+// Deleting it was not possible in the sandbox mount (Operation not
+// permitted), so the file was deliberately left empty so that nobody
+// accidentally imports or reads the old harvest code.
 module.exports = {};

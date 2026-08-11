@@ -1,14 +1,14 @@
 import type { AvailabilityResult, AvailabilityStatus } from "../../../types/shop";
 
-// Der Warenkorb-Button trägt neben "add_to_cart" eine Zustands-Modifier-Klasse,
-// die verrät, welcher der mehreren (alle im HTML vorhandenen, per CSS
-// ein-/ausgeblendeten) Button-Texte aktuell sichtbar ist:
-//   default                -> "In den Warenkorb"  (verfügbar, auf Lager)
-//   sold_out                -> "Ausverkauft"                -> ausblenden
-//   temp_sold_out            -> "Derzeit nicht lieferbar"     -> ausblenden
-//   coming_soon              -> "Coming Soon" (Vorbestellung) -> preorder
-//   not_enough_bonus_coins    -> Sonderfall (Bonus-Coins-Kauf), nicht regulär
-//                                kaufbar -> ausblenden
+// Besides "add_to_cart", the cart button carries a state modifier class that
+// reveals which of the several button texts (all present in the HTML, shown
+// and hidden via CSS) is currently visible:
+//   default                -> "In den Warenkorb"  (available, in stock)
+//   sold_out                -> "Ausverkauft"                -> hide
+//   temp_sold_out            -> "Derzeit nicht lieferbar"     -> hide
+//   coming_soon              -> "Coming Soon" (pre-order)     -> preorder
+//   not_enough_bonus_coins    -> special case (bonus-coin purchase), not
+//                                regularly buyable -> hide
 const STATUS_BY_STATE: Partial<Record<string, AvailabilityStatus>> = {
   default: "in_stock",
   coming_soon: "preorder",
@@ -29,11 +29,11 @@ export function transformHhvListEntry(html: string, articleId: string): Availabi
     ["default", "sold_out", "temp_sold_out", "coming_soon", "not_enough_bonus_coins"].includes(c)
   );
 
-  // state ist bereits gegen eine feste Whitelist (.find(...includes(c))) oben
-  // eingegrenzt, kann also nur einer der bekannten Cart-States sein.
+  // state is already narrowed against a fixed whitelist (.find(...includes(c)))
+  // above, so it can only be one of the known cart states.
   // eslint-disable-next-line security/detect-object-injection
   const status = state ? STATUS_BY_STATE[state] : undefined;
-  if (!status) return null; // ausverkauft / nicht regulär kaufbar -> kein Treffer
+  if (!status) return null; // sold out / not regularly buyable -> no hit
 
   const href = doc.querySelector("a.row_1")?.getAttribute("href") ?? undefined;
 
@@ -54,13 +54,12 @@ export function transformHhvListEntry(html: string, articleId: string): Availabi
   };
 }
 
-// Sucht auf der Katalog-Suchseite ein Element mit data-title, dessen Wert
-// exakt dem gesuchten Label-Namen entspricht (case-insensitive), und liefert
-// den zugehörigen data-path zurück -- das ist der Link auf die
-// Label-gefilterte Trefferliste. data-title/data-path können laut Recon auf
-// demselben Element oder auf einem nahegelegenen Vorfahren sitzen, daher wird
-// zuerst das Element selbst geprüft und dann der nächste Vorfahre mit
-// data-path.
+// Looks on the catalogue search page for an element with data-title whose
+// value matches the searched label name exactly (case-insensitive), and
+// returns the associated data-path -- that is the link to the label-filtered
+// result list. According to recon, data-title/data-path can sit on the same
+// element or on a nearby ancestor, so the element itself is checked first and
+// then the closest ancestor carrying data-path.
 export function findHhvLabelDataPath(html: string, label: string): string | null {
   const doc = new DOMParser().parseFromString(html, "text/html");
   const needle = label.trim().toLowerCase();
@@ -80,8 +79,8 @@ export function findHhvLabelDataPath(html: string, label: string): string | null
   return null;
 }
 
-// Liest die Trefferanzahl aus der Label-gefilterten Trefferliste. Verifiziert
-// per Recon: die Seite zeigt eine Überschrift im Muster "<N> Artikel" an.
+// Reads the hit count from the label-filtered result list. Verified by recon:
+// the page shows a heading in the pattern "<N> Artikel".
 export function extractHhvArticleCount(html: string): number {
   const doc = new DOMParser().parseFromString(html, "text/html");
   const match = (doc.body?.textContent ?? "").match(/(\d+)\s*Artikel/i);

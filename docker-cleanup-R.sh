@@ -1,15 +1,15 @@
 #!/bin/zsh
 #
-# Analog zu docker-cleanup-R.sh im konzert-guide-Projekt: lokaler Cleanup +
-# Rebuild + Neustart auf dem Mac (kein QNAP-Transfer, siehe dafür
-# deploy-qnap.sh). Baut beide Services nativ fürs Mac-Betriebssystem (kein
-# --platform linux/amd64 wie beim QNAP-Cross-Build).
+# Analogous to docker-cleanup-R.sh in the konzert-guide project: local
+# cleanup + rebuild + restart on the Mac (no QNAP transfer, see deploy-qnap.sh
+# for that). Builds both services natively for the Mac operating system (no
+# --platform linux/amd64 as in the QNAP cross build).
 #
-# Security-Gates (aus deploy-qnap.sh übernommen):
-# - tsc --noEmit blockiert den Lauf bei TypeScript-Fehlern.
-# - ESLint läuft rein informativ, blockiert NICHT -- Report landet unter ./test.
-# - Trivy scannt die 2 fertigen Images (HIGH/CRITICAL), rein informativ,
-#   blockiert NICHT -- Reports landen unter ./test.
+# Security gates (taken over from deploy-qnap.sh):
+# - tsc --noEmit blocks the run on TypeScript errors.
+# - ESLint runs purely informatively, does NOT block -- report lands in ./test.
+# - Trivy scans the 2 finished images (HIGH/CRITICAL), purely informative,
+#   does NOT block -- reports land in ./test.
 
 set -e
 

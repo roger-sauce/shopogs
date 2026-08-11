@@ -1,6 +1,6 @@
-// VERALTET -- ersetzt durch browserSession.js (volle Camoufox-
-// Browser-Navigation pro Suche statt Cookie-Harvest-und-Replay).
-// Löschen war im Sandbox-Mount nicht möglich (Operation not permitted),
-// Datei bewusst leer gelassen, damit niemand versehentlich den alten
-// Cookie-Cache-Code importiert oder liest.
+// OBSOLETE -- replaced by browserSession.js (full Camoufox browser
+// navigation per search instead of cookie harvest and replay).
+// Deleting it was not possible in the sandbox mount (Operation not
+// permitted), so the file was deliberately left empty so that nobody
+// accidentally imports or reads the old cookie cache code.
 module.exports = {};

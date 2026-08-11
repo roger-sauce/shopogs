@@ -1,11 +1,11 @@
 import type { AvailabilityResult, AvailabilityStatus } from "../../../types/shop";
 import type { SoundOhmSearchResponse } from "./api";
 
-// `preorder` ist meist null (regulär auf Lager). Verifiziert per Recon:
-// preorder:"stocking" -> Produktseite zeigt wörtlich "In process of
-// stocking" (bestellbar, aber Lieferzeit ungewiss, kann Wochen/Monate
-// dauern). Andere, nicht-null Preorder-Werte behandeln wir konservativ als
-// echte Vorbestellung.
+// `preorder` is usually null (regularly in stock). Verified by recon:
+// preorder:"stocking" -> the product page literally shows "In process of
+// stocking" (orderable, but delivery time uncertain, can take weeks or
+// months). Other, non-null preorder values we treat conservatively as a
+// real preorder.
 function statusFor(preorder: string | null): AvailabilityStatus {
   if (preorder === "stocking") return "processing";
   if (preorder) return "preorder";
@@ -23,17 +23,17 @@ export function transformSoundOhm(raw: SoundOhmSearchResponse): AvailabilityResu
       format: p.format_info ?? p.kind,
       price: p.price,
       currency: "EUR",
-      // Produkt-URL-Muster verifiziert: /product/<slug> (z.B.
-      // /product/thresholds-lp-clear), stimmt exakt mit slug aus der API.
+      // Product URL pattern verified: /product/<slug> (e.g.
+      // /product/thresholds-lp-clear), matches the slug from the API exactly.
       url: `https://www.soundohm.com/product/${p.slug}`,
       status: statusFor(p.preorder),
     }));
 }
 
-// Zählt die Treffer auf einer Label-Übersichtsseite (/label/<slug>).
-// Verifiziert per Recon: jedes gelistete Release steckt in einem Element
-// mit der Klasse "product" (gleiches Markup-Muster wie die normale
-// Suchergebnisliste).
+// Counts the hits on a label index page (/label/<slug>).
+// Verified by recon: every listed release sits in an element
+// with the class "product" (same markup pattern as the normal
+// search result list).
 export function countSoundOhmLabelProducts(html: string): number {
   const doc = new DOMParser().parseFromString(html, "text/html");
   return doc.querySelectorAll(".product").length;

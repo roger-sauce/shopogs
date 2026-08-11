@@ -1,18 +1,18 @@
 import type { AvailabilityResult } from "../../../types/shop";
 import type { AnostSearchResponse } from "./api";
 
-// Pro Format gibt es ein `status`-Feld ("listed" = regulär, "pre-order" =
-// Vorbestellung, Release-/Versanddatum in der Zukunft) und ein separates
-// `has_available_stock`-Boolean für ausverkauft. Verifiziert per Recon
-// (z.B. Carmen Villain "Memoria" LP: status "pre-order", has_available_stock
-// true, release_date in der Zukunft).
+// Each format has a `status` field ("listed" = regular, "pre-order" =
+// preorder, release/shipping date in the future) and a separate
+// `has_available_stock` boolean for sold out. Verified by recon
+// (e.g. Carmen Villain "Memoria" LP: status "pre-order", has_available_stock
+// true, release_date in the future).
 export function transformAnost(raw: AnostSearchResponse): AvailabilityResult[] {
   const releases = raw.releases ?? [];
   return releases.flatMap((release) => {
     const label = release.labels ? Object.values(release.labels)[0]?.name : undefined;
-    // Produkt-URL ist nicht 1:1 verifiziert (nur aus dem Slug-Muster
-    // abgeleitet, das ANOST auch für Label-/Artist-Seiten nutzt: /<hex>/<slug>).
-    // Bei Bedarf gegen die echte Seite gegenchecken.
+    // The product URL is not verified one-to-one (only derived from the slug
+    // pattern that ANOST also uses for label/artist pages: /<hex>/<slug>).
+    // Cross-check against the real page if needed.
     const url = `https://www.anost.net/release/${decodeURIComponent(release.slug)}`;
     return release.formats
       .filter((f) => f.has_available_stock)
@@ -28,11 +28,11 @@ export function transformAnost(raw: AnostSearchResponse): AvailabilityResult[] {
   });
 }
 
-// Sucht in der /labels-Übersichtsseite den Link, dessen Text exakt
-// "<Label> [<Anzahl>]" entspricht (case-insensitive, verifiziert per Recon
-// z.B. "Balmat [8]"). Gibt null zurück, wenn kein Label mit exakt diesem
-// Namen gelistet ist (checkLabelAvailability in index.ts behandelt das
-// dann als 0 Treffer mit Fallback-URL auf die Übersichtsseite selbst).
+// Searches the /labels overview page for the link whose text matches
+// "<label> [<count>]" exactly (case-insensitive, verified by recon,
+// e.g. "Balmat [8]"). Returns null if no label with exactly this name is
+// listed (checkLabelAvailability in index.ts then treats that as 0 hits
+// with a fallback URL pointing at the overview page itself).
 export function findAnostLabelEntry(html: string, label: string): { count: number; url: string } | null {
   const doc = new DOMParser().parseFromString(html, "text/html");
   const needle = label.trim().toLowerCase();

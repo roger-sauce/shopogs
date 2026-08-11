@@ -1,7 +1,8 @@
-# Lokales Test-Setup, analog zum Konzert-Guide-Ansatz (Dockerfile.frontend):
-# Stage 1 baut die Vite-App, Stage 2 served sie über nginx inkl. Reverse-Proxy
-# für die Shop-APIs (siehe nginx.conf) — das Äquivalent zu Vites Dev-Proxy
-# (vite.config.ts), der außerhalb von `npm run dev` nicht existiert.
+# Local test setup, analogous to the konzert-guide approach
+# (Dockerfile.frontend): stage 1 builds the Vite app, stage 2 serves it via
+# nginx including the reverse proxy for the shop APIs (see nginx.conf) — the
+# equivalent of Vite's dev proxy (vite.config.ts), which does not exist
+# outside of `npm run dev`.
 
 # Stage 1: Build
 FROM node:20-alpine AS builder
@@ -11,7 +12,7 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# Stage 2: Serve mit nginx
+# Stage 2: Serve with nginx
 FROM nginx:alpine
 RUN apk update && apk upgrade --no-cache
 COPY --from=builder /app/dist /usr/share/nginx/html

@@ -20,10 +20,11 @@ const jpc: ShopAdapter = {
     const html = await fetchJpcSearch(query);
     const results = transformJpc(html);
 
-    // JPCs Suche matcht Mehrwort-Queries eher großzügig (OR-artig) und
-    // liefert dadurch auch Treffer, die nur einzelne Wörter enthalten
-    // (z.B. bei "Aphex Twin Selected Ambient Works" auch fremde Alben mit
-    // "Selected" im Titel). Gegen Artist+Titel kombiniert gegenprüfen.
+    // JPC's search matches multi-word queries rather generously (OR-like)
+    // and therefore also returns hits that contain only individual words
+    // (e.g. for "Aphex Twin Selected Ambient Works" also unrelated albums
+    // with "Selected" in the title). Cross-check against artist+title
+    // combined.
     return results.filter((r) => matchesQueryWords(`${r.artist ?? ""} ${r.title}`, query));
   },
   async checkLabelAvailability(label): Promise<LabelSearchResult> {

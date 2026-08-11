@@ -1,8 +1,10 @@
-// SoundOhm (soundohm.com) — öffentliche, unauthentifizierte JSON-Suche.
-// Verifiziert per Recon: GET /api/quickSearch?query="<begriff>"
-// (Query-String literal in doppelten Anführungszeichen, URL-encoded)
-// liefert result.products[] inkl. is_in_stock (Boolean).
-const PROXY_BASE = "/proxy/soundohm";
+import { proxyBase } from "../../../lib/proxyBase";
+
+// SoundOhm (soundohm.com) — public, unauthenticated JSON search.
+// Verified by recon: GET /api/quickSearch?query="<term>"
+// (query string literally wrapped in double quotes, URL-encoded)
+// returns result.products[] including is_in_stock (boolean).
+const PROXY_BASE = proxyBase("soundohm");
 
 export interface SoundOhmProduct {
   id: number;
@@ -28,11 +30,11 @@ export async function searchSoundOhm(query: string): Promise<SoundOhmSearchRespo
   return res.json();
 }
 
-// Für die Label-Suche ("Small Label Suche" in der UI) — verifiziert per
-// Recon: die quickSearch-Antwort für eine Label-Namens-Anfrage enthält
-// Produkte mit label_info[].slug, darüber lässt sich die eigentliche
-// Label-Seite /label/<slug> auflösen. Diese Seite listet alle Releases des
-// Labels server-gerendert, ein Treffer pro ".product"-Element (siehe
+// For the label search ("Small Label Suche" in the UI) — verified by
+// recon: the quickSearch response for a label-name query contains
+// products with label_info[].slug, which lets us resolve the actual
+// label page /label/<slug>. That page lists all releases of the label
+// server-rendered, one hit per ".product" element (see
 // transform.ts).
 export async function fetchSoundOhmLabelPage(slug: string): Promise<string> {
   const res = await fetch(`${PROXY_BASE}/label/${slug}`, { headers: { Accept: "text/html" } });

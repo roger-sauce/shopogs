@@ -1,27 +1,27 @@
-# TLS-Terminierung fuer shopogs im Heimnetz. Zertifikat kommt von mkcert
-# (lokale CA, dieselbe wie bei Crate und autoplay-pi auf roon-bridge),
-# deshalb auto_https off -- Caddy soll nichts bei Let's Encrypt anfragen,
-# .local-Namen sind dort ohnehin nicht zertifizierbar.
+# TLS termination for shopogs on the home network. The certificate comes from
+# mkcert (local CA, the same one as for Crate and autoplay-pi on roon-bridge),
+# hence auto_https off -- Caddy should not ask Let's Encrypt for anything,
+# .local names cannot be certified there anyway.
 #
-# Der Caddy laeuft im Docker-Netz des Projekts und erreicht shopogs ueber den
-# Containernamen. Dadurch braucht shopogs keinen veroeffentlichten Host-Port
-# mehr -- der Nginx Proxy Manager spricht den Container ebenfalls ueber
-# shared-proxy-net an.
+# The Caddy runs on the project's Docker network and reaches shopogs by
+# container name. This means shopogs no longer needs a published host port --
+# the Nginx Proxy Manager addresses the container over shared-proxy-net as
+# well.
 {
 	auto_https off
 	admin off
 }
 
 :5443 {
-	# Zugriffsprotokoll. Caddy schreibt es nur, wenn man es ausdruecklich
-	# einschaltet -- ohne diese Zeile gibt es keine Zugriffszeilen, nur
-	# Betriebsmeldungen. Format ist JSON, eine Zeile je Anfrage, mit
-	# request.remote_ip und status.
+	# Access log. Caddy only writes it if it is explicitly switched on --
+	# without this line there are no access lines, only operational
+	# messages. The format is JSON, one line per request, with
+	# request.remote_ip and status.
 	#
-	# Vorbereitung fuer den geplanten Wechsel vom Nginx Proxy Manager auf
-	# Caddy: fail2ban liest bisher NPMs Zeilen mit einem Filter, der auf
-	# "[Client <IP>]" passt. Caddys JSON braucht einen eigenen Filter, und
-	# der laesst sich nur an echten Zeilen entwickeln.
+	# Preparation for the planned move from the Nginx Proxy Manager to
+	# Caddy: so far fail2ban reads NPM's lines with a filter that matches
+	# "[Client <IP>]". Caddy's JSON needs a filter of its own, and that can
+	# only be developed against real lines.
 	log
 	tls /certs/extern-local.pem /certs/extern-local-key.pem
 	reverse_proxy shopogs:80

@@ -20,10 +20,10 @@ const hhv: ShopAdapter = {
   type: "scraping",
   speed: "slow",
   async checkAvailability(artist, title) {
-    // Jede Suche baut im Sidecar eine eigene Camoufox-Session auf (siehe
-    // browserSession.js) -- egal ob die Suche erfolgreich war oder mit
-    // einem Fehler abbricht, muss diese Session danach geschlossen werden,
-    // sonst bleibt der Browser-Prozess bis zum Idle-Timeout offen.
+    // Every search sets up its own Camoufox session in the sidecar (see
+    // browserSession.js) -- no matter whether the search succeeded or
+    // aborted with an error, that session has to be closed afterwards,
+    // otherwise the browser process stays open until the idle timeout.
     try {
       const query = [artist, title].filter(Boolean).join(" ").trim();
       const articleIds = await searchHhvArticleIds(query);
@@ -40,12 +40,12 @@ const hhv: ShopAdapter = {
         })
       );
 
-      // HHVs Suche matcht wie bei SoundOhm/Souffle Continu/JPC breit, nicht
-      // nur exakte Treffer (live beobachtet: Suche "Nu Genea People of the
-      // Moon" lieferte neben der gesuchten Platte auch "Sunny G ... So What
-      // You Want" und "The Shapeshifters ... Let Loose" zurück). Gleicher
-      // Fix wie bei den anderen Shops: jedes Wort der Anfrage muss als
-      // ganzes Wort in Artist+Titel vorkommen.
+      // HHV's search matches broadly, as with SoundOhm/Souffle Continu/JPC,
+      // not just exact hits (observed live: the search "Nu Genea People of
+      // the Moon" returned, besides the record we were after, also "Sunny G
+      // ... So What You Want" and "The Shapeshifters ... Let Loose"). Same
+      // fix as in the other shops: every word of the query has to occur as a
+      // whole word in artist+title.
       return entries
         .filter((e): e is AvailabilityResult => e !== null)
         .filter((r) => matchesQueryWords(`${r.artist ?? ""} ${r.title}`, query));
@@ -54,9 +54,9 @@ const hhv: ShopAdapter = {
     }
   },
   async checkLabelAvailability(label): Promise<LabelSearchResult> {
-    // Wie bei checkAvailability: jede Suche baut im Sidecar eine eigene
-    // Camoufox-Session auf, die danach unbedingt wieder geschlossen werden
-    // muss.
+    // As in checkAvailability: every search sets up its own Camoufox
+    // session in the sidecar, which absolutely has to be closed again
+    // afterwards.
     try {
       const needle = label.trim();
       const searchUrl = `https://www.hhv.de/records/katalog/filter/suche-${HHV_SEARCH_FACET}?term=${encodeURIComponent(
@@ -68,10 +68,10 @@ const hhv: ShopAdapter = {
       const dataPath = findHhvLabelDataPath(html, needle);
 
       if (!dataPath) {
-        // Kein Label-Filter-Link mit passendem data-title gefunden -- Shop
-        // unterstützt Label-Suche, führt dieses Label aber nicht (oder der
-        // Freitext-Suchbegriff traf kein Label). Fallback auf die einfache
-        // Freitext-Suchseite statt einer 404-Detailseite.
+        // No label filter link with a matching data-title found -- the shop
+        // supports label search but does not carry this label (or the
+        // free-text search term did not hit a label). Fall back to the plain
+        // free-text search page instead of a 404 detail page.
         return { supported: true, count: 0, url: searchUrl };
       }
 

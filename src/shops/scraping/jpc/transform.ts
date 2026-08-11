@@ -1,25 +1,25 @@
 import type { AvailabilityResult, AvailabilityStatus } from "../../../types/shop";
 
-// Verifiziert per Recon: jedes Suchergebnis ist ein Element mit
-// id="result-searchng-product-<id>". Relevante Kind-Elemente (stabile
-// Klassennamen, kein Hash-Wirrwarr wie bei Hard Wax):
-//   .by           -> Artist
-//   .title        -> Titel
-//   .availability -> Verfügbarkeitstext (enthält zusätzlich einen
-//                    Info-Button, der vor dem Textauslesen entfernt wird)
-//   .medium       -> Format, z.B. "3 CDs", "LP", "Single 12\"", "Buch"
-//   .price        -> Preis, z.B. "EUR 24,99* Aktueller Preis: EUR 24,99"
-//   h3 a[href]    -> Link zur Produktseite (relativ)
+// Verified by recon: every search result is an element with
+// id="result-searchng-product-<id>". Relevant child elements (stable class
+// names, no hash muddle like with Hard Wax):
+//   .by           -> artist
+//   .title        -> title
+//   .availability -> availability text (additionally contains an info
+//                    button, which is removed before reading the text)
+//   .medium       -> format, e.g. "3 CDs", "LP", "Single 12\"", "Buch"
+//   .price        -> price, e.g. "EUR 24,99* Aktueller Preis: EUR 24,99"
+//   h3 a[href]    -> link to the product page (relative)
 //
-// Verfügbarkeits-Filter der Suche selbst (aus der Sidebar ausgelesen)
-// zeigt: Ergebnisse sind ausschließlich "Artikel am Lager" oder "lieferbar
-// innerhalb von X Tagen/Wochen" — JPC listet also, wie Hard Wax, nur
-// bestellbare Artikel in der Suche. Es gibt keine "ausverkauft"-Treffer.
+// The availability filter of the search itself (read out of the sidebar)
+// shows: results are exclusively "Artikel am Lager" or "lieferbar innerhalb
+// von X Tagen/Wochen" — so JPC, like Hard Wax, only lists orderable
+// articles in the search. There are no "sold out" hits.
 function statusFor(availText: string | null): AvailabilityStatus {
   if (!availText) return "processing";
   if (availText.toLowerCase().includes("am lager")) return "in_stock";
-  // "lieferbar innerhalb von 3 Tagen/einer Woche/1-2 Wochen/..." — bestellbar,
-  // aber nicht sofort auf Lager.
+  // "lieferbar innerhalb von 3 Tagen/einer Woche/1-2 Wochen/..." — orderable,
+  // but not immediately in stock.
   return "processing";
 }
 
@@ -74,9 +74,9 @@ export function transformJpc(html: string): AvailabilityResult[] {
   return results;
 }
 
-// Liest die Trefferanzahl aus der Label-gefilterten Suchseite. Verifiziert
-// per Recon: die Seite zeigt oberhalb der Ergebnisse wörtlich
-// "Ihre Suche ergab <N> Treffer" an, auch wenn N = 0 ist.
+// Reads the hit count from the label-filtered search page. Verified by
+// Recon: above the results the page literally shows
+// "Ihre Suche ergab <N> Treffer", even when N = 0.
 export function extractJpcLabelCount(html: string): number {
   const match = html.match(/Ihre Suche ergab\s*(\d+)/i);
   return match ? parseInt(match[1], 10) : 0;

@@ -1,10 +1,12 @@
-// ANOST (anost.net) — öffentliche, unauthentifizierte JSON-Suche.
-// Verifiziert per Recon: GET /api/public/search?query=<begriff>
-// liefert artists[] und releases[] inkl. formats[].has_available_stock.
+import { proxyBase } from "../../../lib/proxyBase";
+
+// ANOST (anost.net) — public, unauthenticated JSON search.
+// Verified by recon: GET /api/public/search?query=<term>
+// returns artists[] and releases[] including formats[].has_available_stock.
 //
-// Im Dev-Server läuft das über den Vite-Proxy (siehe vite.config.ts), da
-// anost.net keine CORS-Header für Browser-Fetches sendet.
-const PROXY_BASE = "/proxy/anost";
+// On the dev server this runs through the Vite proxy (see vite.config.ts),
+// because anost.net sends no CORS headers for browser fetches.
+const PROXY_BASE = proxyBase("anost");
 
 export interface AnostFormat {
   format: string;
@@ -34,11 +36,11 @@ export async function searchAnost(query: string): Promise<AnostSearchResponse> {
   return res.json();
 }
 
-// Für die Label-Suche ("Small Label Suche" in der UI) — verifiziert per
-// Recon: /labels listet ALLE Labels alphabetisch server-gerendert als
-// einzelne Links "<Name> [<Anzahl>]" (z.B. "Balmat [8]" ->
-// /label/8B2D/balmat). Kein separates JSON-API dafür nötig, ein einziger
-// Seitenaufruf reicht (siehe transform.ts für den Parser).
+// For the label search ("Small Label Suche" in the UI) — verified by
+// recon: /labels lists ALL labels alphabetically, server-rendered, as
+// individual links "<name> [<count>]" (e.g. "Balmat [8]" ->
+// /label/8B2D/balmat). No separate JSON API needed for this, a single
+// page request is enough (see transform.ts for the parser).
 export async function fetchAnostLabelsPage(): Promise<string> {
   const res = await fetch(`${PROXY_BASE}/labels`, { headers: { Accept: "text/html" } });
   if (!res.ok) throw new Error(`ANOST labels page: HTTP ${res.status}`);

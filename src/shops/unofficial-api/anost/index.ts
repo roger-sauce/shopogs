@@ -23,21 +23,21 @@ const anost: ShopAdapter = {
     const results = transformAnost(raw);
 
     if (titleNeedle) {
-      // Titel angegeben: ANOSTs releases[] haben kein eigenes Artist-Feld
-      // (nur einen separaten, nicht verknüpften artists[]-Treffer-Block) --
-      // der Filter kann hier also nur gegen den Titel prüfen, nicht gegen
-      // Artist+Titel kombiniert wie bei den anderen Shops.
+      // Title given: ANOST's releases[] have no artist field of their own
+      // (only a separate, unlinked artists[] block of hits) -- so the filter
+      // can only check against the title here, not against artist+title
+      // combined the way the other shops do.
       return results.filter((r) => matchesQueryWords(r.title, titleNeedle));
     }
 
-    // Nur Artist angegeben, kein Titel: releases[] selbst verrät nicht, ob
-    // ein Treffer zum gesuchten Artist gehört. Den Titel gegen den
-    // Artist-Namen zu prüfen würde denselben Fehltreffer-Bug reproduzieren,
-    // den wir bei SoundOhm/Souffle Continu schon gefixt haben (Artist-Name
-    // erscheint nur zufällig im Titel). Stattdessen den separaten
-    // artists[]-Block der Antwort nutzen: nur wenn ANOST selbst einen
-    // passenden Artist-Treffer meldet, gelten die zurückgegebenen Releases
-    // für diese Anfrage als vertrauenswürdig.
+    // Only artist given, no title: releases[] itself does not reveal whether
+    // a hit belongs to the artist being searched for. Checking the title
+    // against the artist name would reproduce the same false-hit bug we
+    // already fixed for SoundOhm/Souffle Continu (the artist name only
+    // happens to appear in the title by coincidence). Instead use the
+    // separate artists[] block of the response: only if ANOST itself reports
+    // a matching artist hit are the returned releases considered trustworthy
+    // for this query.
     const hasMatchingArtist = (raw.artists ?? []).some((a) => matchesQueryWords(a.name, artistNeedle));
     return hasMatchingArtist ? results : [];
   },

@@ -1,31 +1,31 @@
-// camoufox-js@0.11.1 wählt für die aktuell "neueste unterstützte" Version
-// (152.0.4-alpha.25) fälschlich ein ~557MB-ZIP, das nachweislich NUR
-// Fonts/Fontconfig enthält, kein Browser-Executable (camoufox-bin) --
-// direkt gegen GitHub-Releases geprüft: v135.0.1-beta.24 hat ein
-// vollständiges 680MB-Linux-x64-ZIP mit echtem Browser-Binary. Dieses
-// Skript installiert diese ältere, bekannt funktionierende Version manuell,
-// bevor `npx camoufox-js fetch` (das GeoIP/Addons unabhängig davon
-// unconditional nachlädt) läuft -- dessen Freshness-Check erkennt danach
-// ein gültiges version.json und lässt unsere manuelle Installation unangetastet.
+// For the currently "newest supported" version (152.0.4-alpha.25)
+// camoufox-js@0.11.1 wrongly picks a ~557MB ZIP that demonstrably contains
+// ONLY fonts/fontconfig, no browser executable (camoufox-bin) -- checked
+// directly against the GitHub releases: v135.0.1-beta.24 has a complete
+// 680MB Linux x64 ZIP with a real browser binary. This script installs that
+// older, known-working version manually, before `npx camoufox-js fetch`
+// (which downloads GeoIP/addons unconditionally and independently of this)
+// runs -- its freshness check then finds a valid version.json and leaves
+// our manual installation untouched.
 const fs = require("fs");
 const path = require("path");
 const https = require("https");
 const AdmZip = require("adm-zip");
 
-// INSTALL_DIR/VERSION/RELEASE/ZIP_PATH kommen alle aus Build-Zeit-Konstanten
-// bzw. einer Dockerfile-ENV (nicht aus Nutzereingaben) -- die
-// security/detect-non-literal-fs-filename-Warnungen unten (createWriteStream/
-// mkdirSync/writeFileSync) sind daher Fehlalarme.
+// INSTALL_DIR/VERSION/RELEASE/ZIP_PATH all come from build-time constants
+// or a Dockerfile ENV (not from user input) -- the
+// security/detect-non-literal-fs-filename warnings below (createWriteStream/
+// mkdirSync/writeFileSync) are therefore false alarms.
 const INSTALL_DIR = process.env.CAMOUFOX_INSTALL_DIR || "/opt/camoufox";
 const VERSION = "135.0.1";
 const RELEASE = "beta.24";
-// Architektur aus der Build-Umgebung ableiten statt hart auf x86_64: der
-// Stack zieht von der amd64-QNAP auf einen arm64-Raspberry-Pi um, und
-// Camoufox ist ein eigenes Firefox-Binary (kein Playwright-Browser), muss
-// also zur Host-Architektur passen. v135.0.1-beta.24 hat beide Builds als
-// vollwertige ZIPs (lin.arm64 674MB, lin.x86_64 680MB) -- die gepinnte,
-// bekannt funktionierende Version bleibt damit unangetastet. process.arch
-// statt fest "arm64", damit ein Build auf amd64 weiterhin funktioniert.
+// Derive the architecture from the build environment instead of hardcoding
+// x86_64: the stack is moving from the amd64 QNAP to an arm64 Raspberry Pi,
+// and Camoufox is a Firefox binary of its own (not a Playwright browser), so
+// it has to match the host architecture. v135.0.1-beta.24 has both builds as
+// full ZIPs (lin.arm64 674MB, lin.x86_64 680MB) -- the pinned, known-working
+// version therefore stays untouched. process.arch instead of a fixed
+// "arm64", so that a build on amd64 keeps working.
 const ARCH = process.arch === "arm64" ? "arm64" : "x86_64";
 const ZIP_URL = `https://github.com/daijro/camoufox/releases/download/v${VERSION}-${RELEASE}/camoufox-${VERSION}-${RELEASE}-lin.${ARCH}.zip`;
 const ZIP_PATH = "/tmp/camoufox-manual.zip";

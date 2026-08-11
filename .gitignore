@@ -12,3 +12,5 @@ caddy/certs/
 *.local
 *.tar.gz
 /test/*
+# Local test overrides, host-specific
+docker-compose.override.yml

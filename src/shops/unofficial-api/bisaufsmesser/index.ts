@@ -19,8 +19,8 @@ const bisAufsMesser: ShopAdapter = {
     const raw = await searchBisAufsMesser(query);
     const results = transformBisAufsMesser(raw);
 
-    // Shopify-Suche (vendor = Artist) matcht wie bei den anderen Shops eher
-    // breit -- gleicher Wortgrenzen-Filter gegen Artist+Titel kombiniert.
+    // Shopify search (vendor = artist) matches rather broadly, as in the
+    // other shops -- same word-boundary filter against artist+title combined.
     return results.filter((r) => matchesQueryWords(`${r.artist ?? ""} ${r.title}`, query));
   },
 };

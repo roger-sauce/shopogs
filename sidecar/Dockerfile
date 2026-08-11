@@ -1,66 +1,67 @@
-# Browser-Sidecar: löst Bot-Schutz (JS-Challenges, TLS-/Fingerprint-Blocks)
-# per Camoufox (C++-gepatchtes, anti-detect Firefox) -- jede Suche navigiert
-# live durch eine eigene Session statt Cookies zu ernten und per Node-fetch
-# wiederzuverwenden, siehe browserSession.js. Aktuell für HHV und Boomkat.
+# Browser sidecar: solves bot protection (JS challenges, TLS/fingerprint
+# blocks) via Camoufox (C++-patched, anti-detect Firefox) -- every search
+# navigates live through a session of its own instead of harvesting cookies
+# and reusing them via Node fetch, see browserSession.js. Currently for HHV
+# and Boomkat.
 #
-# Weder Playwrights gebündeltes Chromium (TLS-Fingerprint erkannt,
-# ERR_CONNECTION_CLOSED) noch Playwrights gebündeltes Firefox (Verbindung
-# klappt, aber JS-Challenges werden nicht als "echt" durchgewunken) kamen an
-# HHVs Bot-Schutz vorbei. Camoufox patcht Firefox auf Quellcode-Ebene gegen
-# genau solche Verhaltens-/Fingerprint-Checks.
+# Neither Playwright's bundled Chromium (TLS fingerprint detected,
+# ERR_CONNECTION_CLOSED) nor Playwright's bundled Firefox (the connection
+# works, but JS challenges are not waved through as "real") got past HHV's
+# bot protection. Camoufox patches Firefox at source level against exactly
+# such behaviour/fingerprint checks.
 FROM mcr.microsoft.com/playwright:v1.61.1-jammy
 
-# Fester Installationspfad statt automatisch ermitteltem Home-Cache-Verzeichnis
-# (~/.cache/camoufox) -- die Runtime-Fehlermeldung "not installed at
-# /root/.cache/camoufox" trotz erfolgreichem 78s-Download beim Build deutet
-# auf eine HOME-Diskrepanz zwischen Build- und Laufzeit-Kontext hin. Laut
-# camoufox-js-Doku genau für Container empfohlen (analog zu Playwrights
-# PLAYWRIGHT_BROWSERS_PATH). ENV wirkt für RUN und CMD gleichermaßen, also
-# garantiert derselbe Pfad in beiden Phasen. Seit dem Wechsel auf pwuser ist
-# das doppelt wichtig: HOME ist zur Laufzeit /home/pwuser, nicht /root.
+# Fixed installation path instead of an automatically determined home cache
+# directory (~/.cache/camoufox) -- the runtime error message "not installed at
+# /root/.cache/camoufox" despite a successful 78s download during the build
+# points to a HOME discrepancy between build and runtime context. According to
+# the camoufox-js docs this is recommended precisely for containers (analogous
+# to Playwright's PLAYWRIGHT_BROWSERS_PATH). ENV applies to RUN and CMD alike,
+# so the same path is guaranteed in both phases. Since the switch to pwuser
+# that matters twice over: at runtime HOME is /home/pwuser, not /root.
 ENV CAMOUFOX_INSTALL_DIR=/opt/camoufox
 
-# Beide Verzeichnisse dem mitgelieferten unprivilegierten Benutzer übereignen,
-# BEVOR etwas hineingeschrieben wird. Ein nachträgliches
-# "chown -R /opt/camoufox" würde die entpackten rund 1,5 GB in eine zusätzliche
-# Image-Schicht duplizieren -- so bleibt es bei einer leeren Verzeichnisschicht.
+# Hand both directories over to the bundled unprivileged user BEFORE anything
+# is written into them. A later "chown -R /opt/camoufox" would duplicate the
+# roughly 1.5 GB of unpacked files into an additional image layer -- this way
+# it stays at one empty directory layer.
 RUN mkdir -p /app /opt/camoufox && chown pwuser:pwuser /app /opt/camoufox
 
-# Ab hier läuft alles als pwuser (UID 1000, im Playwright-Image enthalten):
-# der Bau und die Laufzeit. Dieser Container rendert fremdes JavaScript von
-# Shop-Seiten und ist damit der exponierteste Teil des Stacks -- er hat als
-# root nichts zu suchen. Zusammen mit cap_drop: ALL und no-new-privileges
-# im docker-compose.yml bleibt selbst bei einer Übernahme des Browsers
-# praktisch nichts übrig, worauf sich aufbauen ließe.
+# From here on everything runs as pwuser (UID 1000, contained in the
+# Playwright image): the build and the runtime. This container renders
+# foreign JavaScript from shop pages and is thus the most exposed part of the
+# stack -- it has no business running as root. Together with cap_drop: ALL and
+# no-new-privileges in docker-compose.yml, even a takeover of the browser
+# leaves practically nothing left to build on.
 USER pwuser
 WORKDIR /app
 
 COPY --chown=pwuser:pwuser package*.json ./
-# npm ci statt npm install: nutzt ausschließlich package-lock.json, installiert
-# also exakt die geprüften, gesperrten Versionen -- kein "zieht sich beim
-# nächsten Build automatisch die neueste camoufox-js-Version" mehr. Genau das
-# hat uns hier den Bruch eingebrockt: ein --no-cache-Rebuild zog camoufox-js
-# 0.11.2 (statt der bis dahin exakt gleich gebliebenen 0.11.1), dessen neuer
-# Fingerprint-Generator eine "audio:seed"-Property setzt, die unser bewusst
-# gepinntes altes Camoufox-Browser-Binary (v135.0.1-beta.24, siehe
-# install-camoufox.js) nicht kennt -- jede Session-Erstellung (HHV + Boomkat)
-# crashte seitdem mit "UnknownProperty: Unknown property audio:seed in
-# config". package-lock.json fehlte bis jetzt komplett in diesem Ordner.
+# npm ci instead of npm install: uses package-lock.json exclusively, so it
+# installs exactly the checked, locked versions -- no more "pulls the newest
+# camoufox-js version automatically on the next build". That is precisely what
+# landed us with the breakage here: a --no-cache rebuild pulled camoufox-js
+# 0.11.2 (instead of the 0.11.1 that had stayed exactly the same until then),
+# whose new fingerprint generator sets an "audio:seed" property that our
+# deliberately pinned old Camoufox browser binary (v135.0.1-beta.24, see
+# install-camoufox.js) does not know -- every session creation (HHV + Boomkat)
+# crashed since then with "UnknownProperty: Unknown property audio:seed in
+# config". Until now package-lock.json was missing entirely from this folder.
 RUN npm ci --omit=dev
 
 COPY --chown=pwuser:pwuser scripts/install-camoufox.js ./scripts/install-camoufox.js
 RUN node scripts/install-camoufox.js
-# camoufox-js' eigener Installer macht nach dem Entpacken ein `chmod -R 755`
-# -- unser manuelles Skript (nur AdmZip extractAllTo) nicht, deshalb
-# EACCES beim Start von camoufox-bin ohne diesen Schritt.
+# camoufox-js' own installer does a `chmod -R 755` after unpacking
+# -- our manual script (only AdmZip extractAllTo) does not, hence
+# EACCES when starting camoufox-bin without this step.
 RUN chmod -R 755 /opt/camoufox
-# Kein `npx camoufox-js fetch` mehr danach: der Befehl vergleicht die
-# installierte gegen die "neueste" Version und aktualisiert ungefragt --
-# genau das hat unsere manuell installierte, funktionierende v135.0.1-beta.24
-# gerade wieder mit der kaputten "neuesten" v152 überschrieben. GeoIP
-# brauchen wir nicht (unser Code setzt nie `geoip: true`), Addons kommen
-# ggf. direkt aus dem npm-Paket selbst -- falls das fehlt, sehen wir das im
-# nächsten Test als klaren neuen Fehler.
+# No more `npx camoufox-js fetch` afterwards: the command compares the
+# installed against the "newest" version and updates unasked -- that is
+# exactly what just overwrote our manually installed, working
+# v135.0.1-beta.24 with the broken "newest" v152 again. We do not need GeoIP
+# (our code never sets `geoip: true`), addons come if necessary straight from
+# the npm package itself -- if that is missing, we will see it in the next
+# test as a clear new error.
 COPY --chown=pwuser:pwuser src ./src
 
 EXPOSE 3001

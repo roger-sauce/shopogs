@@ -1,69 +1,69 @@
-// Hält pro Shop eine laufende Camoufox-Session (Browser + eine offene Seite)
-// für die Dauer EINER Suche am Leben. Generisch für mehrere Shops gebaut
-// (aktuell HHV + Boomkat) -- jeder Eintrag in SHOP_CONFIG beschreibt einen
-// eigenen Shop, der Rest der Logik ist shop-agnostisch.
+// Keeps one running Camoufox session (browser + one open page) per shop
+// alive for the duration of ONE search. Built generically for several shops
+// (currently HHV + Boomkat) -- each entry in SHOP_CONFIG describes one
+// shop of its own, the rest of the logic is shop-agnostic.
 //
-// Zwei grundverschiedene Zugriffsarten:
-//   - navigateAndGetHtml: echte Vollnavigation (page.goto). Nötig für
-//     Endpunkte, die im echten Seitenbetrieb NUR per Vollnavigation
-//     aufgerufen werden (z.B. HHVs Suchseite) -- deren Bot-Challenge besteht
-//     teils aus JS, das per document.cookie einen Cookie setzt und sich
-//     dann selbst per document.location.reload(true) neu lädt. Das läuft
-//     NUR bei einer echten Navigation, niemals bei einem fetch() -- auch
-//     nicht bei einem fetch() von INNERHALB der Seite (page.evaluate), weil
-//     fetch() niemals <script>-Inhalte der Antwort ausführt (verifiziert an
-//     HHV: ein fetch aus der echten Camoufox-Seite heraus lieferte exakt
-//     die Challenge-Stub-Seite zurück).
-//   - fetchViaBrowser: fetch() INNERHALB der Seite. Für Endpunkte, die auch
-//     die echte Seite selbst per AJAX/XHR nachlädt (z.B. HHVs
-//     /lazy/artikel/.../list_entry Turbo-Frames, Boomkats
-//     /api/autocomplete). Läuft über die echte Browser-Verbindung (TLS-
-//     Fingerprint, Cookies, Referer) -- das ist bei Boomkat vermutlich der
-//     entscheidende Unterschied zum alten, direkt in nginx/vite geproxyten
-//     Ansatz, der dort mit HTTP 403 blockiert wurde (TLS-/Bot-Fingerprinting,
-//     das ein simpler Reverse-Proxy nicht imitieren kann).
+// Two fundamentally different kinds of access:
+//   - navigateAndGetHtml: real full navigation (page.goto). Needed for
+//     endpoints that in real page operation are called ONLY via full
+//     navigation (e.g. HHV's search page) -- their bot challenge consists
+//     partly of JS that sets a cookie via document.cookie and then
+//     reloads itself via document.location.reload(true). That runs
+//     ONLY on a real navigation, never on a fetch() -- not even on a
+//     fetch() from INSIDE the page (page.evaluate), because fetch() never
+//     executes <script> content of the response (verified against HHV: a
+//     fetch from inside the real Camoufox page returned exactly the
+//     challenge stub page).
+//   - fetchViaBrowser: fetch() INSIDE the page. For endpoints that the real
+//     page itself also loads via AJAX/XHR (e.g. HHV's
+//     /lazy/artikel/.../list_entry turbo frames, Boomkat's
+//     /api/autocomplete). Runs over the real browser connection (TLS
+//     fingerprint, cookies, referer) -- with Boomkat that is presumably the
+//     decisive difference from the old approach proxied directly in
+//     nginx/vite, which was blocked there with HTTP 403 (TLS/bot
+//     fingerprinting that a simple reverse proxy cannot imitate).
 //
-// Jede neue Session navigiert zuerst einmal zur Shop-Startseite (Cookie-
-// Banner wegklicken), BEVOR irgendein Request läuft -- bei HHV ändert das
-// nichts (die Suchseite navigiert ohnehin gleich danach echt), bei Boomkat
-// ist es Voraussetzung: die allererste Anfrage einer Suche ist dort die
-// Autocomplete-AJAX-API, ein fetch() von einer noch leeren about:blank-Seite
-// aus wäre falscher Origin / keine Same-Site-Cookies.
+// Every new session first navigates once to the shop start page (click the
+// cookie banner away) BEFORE any request runs -- with HHV that changes
+// nothing (the search page navigates for real right afterwards anyway), with
+// Boomkat it is a precondition: there the very first request of a search is
+// the autocomplete AJAX API, and a fetch() from a still empty about:blank
+// page would be the wrong origin / no same-site cookies.
 const SHOP_CONFIG = {
   hhv: {
     origin: "https://www.hhv.de",
     locale: "de-DE",
     acceptButtonPattern: /akzeptieren/i,
-    // Turbo-Frame-Nachladen -- auch die echte Seite ruft das per AJAX auf.
+    // Turbo frame lazy loading -- the real page calls this via AJAX too.
     ajaxPathPrefixes: ["/lazy/artikel/"],
   },
   boomkat: {
     origin: "https://boomkat.com",
     locale: "en-GB",
     acceptButtonPattern: /accept|agree|got it/i,
-    // Autocomplete-Suche -- auch die echte Seite ruft das per AJAX auf,
-    // während man in die Suchbox tippt.
+    // Autocomplete search -- the real page calls this via AJAX too,
+    // while you type into the search box.
     ajaxPathPrefixes: ["/api/autocomplete"],
   },
 };
 
-// Sicherheitsnetz -- im Normalfall schließt das Frontend die Session aktiv
-// über closeSession() (siehe server.js /__session/close), lange bevor
-// dieses Timeout greift.
+// Safety net -- normally the frontend closes the session actively
+// via closeSession() (see server.js /__session/close), long before
+// this timeout takes effect.
 const SESSION_IDLE_TTL_MS = 2 * 60 * 1000;
 
 const sessions = new Map(); // shop -> { browser, page, expiresAt }
 const inFlightSetup = new Map(); // shop -> Promise<session>
 
-// `shop` kommt in server.js direkt aus dem URL-Pfad (/proxy/:shop/*), ist
-// also potenziell attacker-kontrolliert. Ein direktes SHOP_CONFIG[shop]
-// würde bei Keys wie "constructor" oder "__proto__" ein Objekt von
-// Object.prototype statt undefined liefern und so den `if (!config)`-Check
-// weiter unten umgehen -- deshalb hier ein echter hasOwnProperty-Guard statt
-// direktem Property-Zugriff.
+// In server.js, `shop` comes straight from the URL path (/proxy/:shop/*), so
+// it is potentially attacker-controlled. A direct SHOP_CONFIG[shop] would,
+// for keys like "constructor" or "__proto__", return an object from
+// Object.prototype instead of undefined and thus bypass the `if (!config)`
+// check further below -- hence a real hasOwnProperty guard here instead of
+// direct property access.
 function getShopConfig(shop) {
-  // Der eigentliche Guard steht direkt davor (Object.hasOwn) -- der Linter
-  // erkennt den Zusammenhang im Ternary nicht und flaggt den Zugriff trotzdem.
+  // The actual guard sits directly in front of it (Object.hasOwn) -- the
+  // linter does not see the connection in the ternary and flags the access anyway.
   // eslint-disable-next-line security/detect-object-injection
   return Object.hasOwn(SHOP_CONFIG, shop) ? SHOP_CONFIG[shop] : undefined;
 }
@@ -102,21 +102,20 @@ async function acceptCookieBannerIfPresent(shop, page) {
   }
 }
 
-// Navigation mit "networkidle" als WUNSCH statt als Bedingung.
+// Navigation with "networkidle" as a WISH rather than a condition.
 //
-// networkidle gilt als erfüllt, wenn eine halbe Sekunde lang keine
-// Netzwerkanfrage läuft. Auf Shop-Seiten mit Analytik, Werbung oder
-// Long-Polling tritt dieser Zustand nie ein -- und dann scheiterte der
-// gesamte Aufruf nach 30 Sekunden, obwohl die Seite längst vollständig
-// geladen war. Beobachtet bei HHV am 04.08.2026: dieselbe Suche schlug fehl
-// und lief beim zweiten Versuch durch, je nachdem was die Tracking-Skripte
-// gerade taten. Playwright rät in der eigenen Dokumentation von networkidle
-// als Wartebedingung ab.
+// networkidle counts as met when no network request runs for half a
+// second. On shop pages with analytics, advertising or long polling this
+// state never occurs -- and then the entire call failed after 30 seconds,
+// even though the page had long since been fully loaded. Observed with HHV
+// on 04.08.2026: the same search failed and went through on the second
+// attempt, depending on what the tracking scripts were doing at the time.
+// Playwright advises against networkidle as a wait condition in its own
+// documentation.
 //
-// Deshalb: Zeitüberschreitung protokollieren und mit dem vorhandenen Stand
-// weiterarbeiten. Ist die Seite tatsächlich unbrauchbar, greift die
-// Challenge-Erkennung in server.js (ungewöhnlich kleiner Body) und erzwingt
-// einen Versuch mit frischer Session.
+// Therefore: log the timeout and carry on with the state we have. If the
+// page really is unusable, the challenge detection in server.js kicks in
+// (unusually small body) and forces an attempt with a fresh session.
 async function gotoTolerant(page, url, beschreibung) {
   try {
     await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
@@ -127,11 +126,11 @@ async function gotoTolerant(page, url, beschreibung) {
       );
       return "timeout";
     }
-    // NS_BINDING_ABORTED: die Navigation wurde abgebrochen. Bei Boomkat der
-    // Fall, wenn die Autocomplete-Schnittstelle einen Produktlink zu einer
-    // Seite liefert, die es nicht gibt -- sie tut das auch für Platten, die
-    // dort gar nicht gefuehrt werden. Das ist kein Fehler, sondern schlicht
-    // kein Treffer, und gehoert nicht als Stacktrace ins Protokoll.
+    // NS_BINDING_ABORTED: the navigation was aborted. With Boomkat this is
+    // the case when the autocomplete interface returns a product link to a
+    // page that does not exist -- it does that for records that are not
+    // stocked there at all. That is not an error, simply no hit, and it
+    // does not belong in the log as a stack trace.
     if (/NS_BINDING_ABORTED/.test(e.message)) {
       console.log(`[browser-sidecar][debug] Navigation abgebrochen für ${beschreibung} -- kein Treffer`);
       return "abgebrochen";
@@ -146,20 +145,20 @@ async function setupSession(shop) {
   if (!config) throw new Error(`Unbekannter Shop: ${shop}`);
 
   const { Camoufox } = await import("camoufox-js");
-  // exclude_addons: ["UBO"] -- Camoufox versucht sonst bei JEDEM Start,
-  // uBlock Origin herunterzuladen und in ein globales, geteiltes
-  // Addon-Verzeichnis zu entpacken (unabhängig vom Shop). Seit "Nicht ganz
-  // so Schnell" mehrere Shops parallel durchsucht (HHV + Boomkat via
-  // Promise.all), starten mehrere Camoufox-Instanzen gleichzeitig und
-  // race(t)en beim Entpacken in denselben Ordner -- eine Instanz erwischt
-  // dabei ein halbfertiges Verzeichnis ("manifest.json is missing"). Wir
-  // brauchen kein Ad-Blocking (wir wollen ja den vollen Seiteninhalt),
-  // daher komplett abschalten statt nur die Race Condition zu entschärfen.
+  // exclude_addons: ["UBO"] -- otherwise Camoufox tries on EVERY start to
+  // download uBlock Origin and unpack it into a global, shared addon
+  // directory (regardless of the shop). Since "Nicht ganz so Schnell"
+  // searches several shops in parallel (HHV + Boomkat via Promise.all),
+  // several Camoufox instances start at the same time and race each other
+  // while unpacking into the same folder -- one instance then catches a
+  // half-finished directory ("manifest.json is missing"). We do not need
+  // ad blocking (we do want the full page content), therefore switch it
+  // off completely instead of merely defusing the race condition.
   const browser = await Camoufox({ headless: true, locale: config.locale, exclude_addons: ["UBO"] });
   const page = await browser.newPage();
 
-  // Startseite zuerst -- siehe Erklärung oben (Origin/Cookies warm machen,
-  // bevor irgendein fetch() aus der Seite heraus läuft).
+  // Start page first -- see the explanation above (warm up origin/cookies
+  // before any fetch() runs from inside the page).
   await gotoTolerant(page, config.origin, `${shop} Startseite`);
   await page.waitForTimeout(1000);
   await acceptCookieBannerIfPresent(shop, page);
@@ -172,7 +171,7 @@ async function setupSession(shop) {
 async function getSession(shop) {
   const existing = sessions.get(shop);
   if (!isExpired(existing)) return existing;
-  if (existing) await closeSession(shop); // abgelaufen -> aufräumen
+  if (existing) await closeSession(shop); // expired -> clean up
 
   if (inFlightSetup.has(shop)) return inFlightSetup.get(shop);
 
@@ -186,8 +185,8 @@ function touchSession(shop) {
   if (session) session.expiresAt = Date.now() + SESSION_IDLE_TTL_MS;
 }
 
-// Echte Vollnavigation -- einzige Möglichkeit, JS-Challenges auszulösen,
-// die per document.location.reload nach dem Cookie-Setzen funktionieren.
+// Real full navigation -- the only way to trigger JS challenges that work
+// via document.location.reload after the cookie has been set.
 async function navigateAndGetHtml(shop, path) {
   const config = getShopConfig(shop);
   if (!config) throw new Error(`Unbekannter Shop: ${shop}`);
@@ -197,9 +196,9 @@ async function navigateAndGetHtml(shop, path) {
 
   const ergebnis = await gotoTolerant(session.page, url, `${shop} ${path}`);
 
-  // Abgebrochene Navigation heisst: die Zielseite existiert nicht. Als 404
-  // melden statt als Fehler -- der Aufrufer in index.ts wertet das dann als
-  // "kein Treffer" und schreibt keinen Stacktrace ins Protokoll.
+  // An aborted navigation means: the target page does not exist. Report it
+  // as 404 instead of as an error -- the caller in index.ts then reads that
+  // as "no hit" and writes no stack trace into the log.
   if (ergebnis === "abgebrochen") {
     touchSession(shop);
     return { status: 404, body: "", contentType: "text/html" };
@@ -213,8 +212,8 @@ async function navigateAndGetHtml(shop, path) {
   return { status: 200, body, contentType: "text/html" };
 }
 
-// fetch() INNERHALB der Seite -- für Endpunkte, die auch die echte Seite
-// per AJAX/XHR aufruft.
+// fetch() INSIDE the page -- for endpoints that the real page itself also
+// calls via AJAX/XHR.
 async function fetchViaBrowser(shop, path) {
   const config = getShopConfig(shop);
   if (!config) throw new Error(`Unbekannter Shop: ${shop}`);
@@ -232,9 +231,9 @@ async function fetchViaBrowser(shop, path) {
   return result;
 }
 
-// Erzwingt eine frische Session beim nächsten Request -- entweder weil die
-// Antwort wie eine Challenge-/Block-Seite aussieht, oder weil das Frontend
-// per /__session/close meldet, dass die Suche fertig ist.
+// Forces a fresh session on the next request -- either because the response
+// looks like a challenge/block page, or because the frontend reports via
+// /__session/close that the search is finished.
 async function invalidateSession(shop) {
   await closeSession(shop);
 }

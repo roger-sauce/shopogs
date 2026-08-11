@@ -1,10 +1,12 @@
-// Hard Wax (hardwax.com) — klassisches, komplett server-gerendertes HTML,
-// kein JS-Framework, keine XHR-API. Verifiziert per Recon:
-// GET /?find=<suchbegriff> liefert die Ergebnisliste direkt als HTML.
+import { proxyBase } from "../../../lib/proxyBase";
+
+// Hard Wax (hardwax.com) — classic, fully server-rendered HTML, no JS
+// framework, no XHR API. Verified by recon:
+// GET /?find=<search term> returns the result list directly as HTML.
 //
-// Hard Wax listet grundsätzlich nur Artikel, die aktuell auf Lager sind —
-// ein Treffer in der Suche bedeutet also "verfügbar" (siehe transform.ts).
-const PROXY_BASE = "/proxy/hardwax";
+// Hard Wax generally only lists articles that are currently in stock — a
+// hit in the search therefore means "available" (see transform.ts).
+const PROXY_BASE = proxyBase("hardwax");
 
 export async function fetchHardWaxSearch(query: string): Promise<string> {
   const url = `${PROXY_BASE}/?find=${encodeURIComponent(query)}`;
@@ -13,13 +15,13 @@ export async function fetchHardWaxSearch(query: string): Promise<string> {
   return res.text();
 }
 
-// Für die Label-Suche ("Small Label Suche" in der UI) — Hard Wax hat eine
-// eigene Label-Seite unter /label/<slug>/, URL-Muster analog zu den anderen
-// klassischen server-gerendertes-HTML-Shops (JPC/Souffle Continu). Ein nicht
-// existierendes Label liefert (wie bei JPC) eine gültige "keine Treffer"-
-// Antwort statt eines echten Fehlers -- daher wird 404 hier bewusst NICHT
-// als Error behandelt, sondern wie jede andere Antwort weitergereicht (siehe
-// transform.ts, das die "No results."-Meldung erkennt).
+// For the label search ("Small Label Suche" in the UI) — Hard Wax has its
+// own label page at /label/<slug>/, URL pattern analogous to the other
+// classic server-rendered-HTML shops (JPC/Souffle Continu). A label that
+// does not exist returns (as with JPC) a valid "no hits" response instead
+// of a real error -- which is why a 404 is deliberately NOT treated as an
+// error here, but passed on like any other response (see transform.ts,
+// which detects the "No results." message).
 export async function fetchHardWaxLabelPage(slug: string): Promise<string> {
   const res = await fetch(`${PROXY_BASE}/label/${slug}/`, { headers: { Accept: "text/html" } });
   if (!res.ok && res.status !== 404) {
@@ -28,8 +30,8 @@ export async function fetchHardWaxLabelPage(slug: string): Promise<string> {
   return res.text();
 }
 
-// Wandelt einen Label-Namen in den URL-Slug der Label-Seite um (z.B. "Balmat"
-// -> "balmat"). Gleiches Muster wie Boomkats slugifyArtist.
+// Converts a label name into the URL slug of the label page (e.g. "Balmat"
+// -> "balmat"). Same pattern as Boomkat's slugifyArtist.
 export function slugifyHardWaxLabel(label: string): string {
   const ascii = label
     .normalize("NFD")

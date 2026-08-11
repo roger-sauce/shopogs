@@ -1,9 +1,11 @@
-// JPC (jpc.de) — klassisches, server-gerendertes HTML, kein JSON-API nötig.
-// Verifiziert per Recon: GET https://www.jpc.de/s/<suchbegriff mit "+"
-// statt Leerzeichen> liefert die Trefferliste direkt als HTML (ohne
-// Client-JS-Nachladen — ein reiner fetch() enthält bereits alle Treffer der
-// ersten Ergebnisseite, ca. 20 Stück).
-const PROXY_BASE = "/proxy/jpc";
+import { proxyBase } from "../../../lib/proxyBase";
+
+// JPC (jpc.de) — classic, server-rendered HTML, no JSON API needed.
+// Verified by recon: GET https://www.jpc.de/s/<search term with "+" instead
+// of spaces> returns the hit list directly as HTML (without client-side JS
+// reloading — a plain fetch() already contains all hits of the first result
+// page, about 20 of them).
+const PROXY_BASE = proxyBase("jpc");
 
 export async function fetchJpcSearch(query: string): Promise<string> {
   const path = query
@@ -12,21 +14,20 @@ export async function fetchJpcSearch(query: string): Promise<string> {
     .map(encodeURIComponent)
     .join("+");
   const res = await fetch(`${PROXY_BASE}/s/${path}`, { headers: { Accept: "text/html" } });
-  // Eigenheit von JPC (verifiziert): eine Suche ohne Treffer liefert nicht
-  // HTTP 200, sondern HTTP 404 — mit ganz normalem HTML-Body ("Ihr
-  // Suchergebnis: Die Suchanfrage lieferte keine Ergebnisse."). Das ist kein
-  // Fehler, sondern eine gültige "0 Treffer"-Antwort und wird daher NICHT
-  // als Error geworfen, sondern wie jede andere Antwort geparst (liefert
-  // dann einfach 0 Produkt-Kacheln). Nur andere Fehlercodes (5xx etc.)
-  // gelten als echter Fehler.
+  // Quirk of JPC (verified): a search without hits does not return HTTP 200
+  // but HTTP 404 — with a perfectly normal HTML body ("Ihr Suchergebnis:
+  // Die Suchanfrage lieferte keine Ergebnisse."). That is not an error but
+  // a valid "0 hits" response and is therefore NOT thrown as an error, but
+  // parsed like any other response (which then simply yields 0 product
+  // tiles). Only other error codes (5xx etc.) count as a real error.
   if (!res.ok && res.status !== 404) {
     throw new Error(`JPC search: HTTP ${res.status}`);
   }
   return res.text();
 }
 
-// Wandelt eine Anfrage in JPCs "+"-getrennten URL-Pfad um (gleiches Muster
-// wie fetchJpcSearch), für Suche UND Label-Suche gemeinsam genutzt.
+// Converts a query into JPC's "+"-separated URL path (same pattern as
+// fetchJpcSearch), shared by the search AND the label search.
 function toJpcSearchPath(query: string): string {
   return query
     .trim()
@@ -35,37 +36,37 @@ function toJpcSearchPath(query: string): string {
     .join("+");
 }
 
-// Für die Label-Suche ("Small Label Suche" in der UI) — ein zunächst per
-// (inzwischen überholter) Recon angenommener "ctxlabel"-Parameter auf
-// /jpcng/vinyl/search/index.html erwies sich bei einem echten Live-Test als
-// NICHT funktionsfähig: JPC leitet diese URL serverseitig still auf die
-// generische, ungefilterte Suche /s/<begriff> um (Parameter werden komplett
-// verworfen) -- über den Vite-Dev-Proxy führte dieser Redirect sogar zu einem
-// harten "Failed to fetch", weil der Browser dem Location-Header direkt zu
-// jpc.de folgt und dort an CORS scheitert.
+// For the label search ("Small Label Suche" in the UI) — a "ctxlabel"
+// parameter on /jpcng/vinyl/search/index.html, initially assumed from
+// (by now outdated) recon, turned out NOT to work in a real live test: JPC
+// silently redirects this URL server-side to the generic, unfiltered search
+// /s/<term> (parameters are discarded completely) -- through the Vite dev
+// proxy this redirect even led to a hard "Failed to fetch", because the
+// browser follows the Location header straight to jpc.de and fails on CORS
+// there.
 //
-// Den tatsächlich funktionierenden Mechanismus per Live-Recon gefunden: jede
-// Produktseite verlinkt ihr Label mit `/s/<Label>?searchtype=label` -- exakt
-// derselbe /s/-Suchendpunkt wie die normale Suche, nur mit einem
-// zusätzlichen Query-Parameter, der KEINEN Redirect auslöst und echt nach
-// Label filtert (verifiziert: "Balmat" liefert "Ihre Suche ergab 2 (LPs)",
-// ein Label ohne Treffer liefert dieselbe "keine Ergebnisse"-Seite wie die
-// normale Suche, siehe fetchJpcSearch). Schränkt allerdings NICHT auf Vinyl
-// ein (wie die normale Suche auch) -- eine spezifisch auf Vinyl begrenzte
-// Label-Facette wurde in der Sidebar nicht gefunden.
+// Found the mechanism that actually works by live recon: every product page
+// links its label with `/s/<Label>?searchtype=label` -- exactly the same
+// /s/ search endpoint as the normal search, only with an additional query
+// parameter that triggers NO redirect and really filters by label
+// (verified: "Balmat" returns "Ihre Suche ergab 2 (LPs)", a label without
+// hits returns the same "no results" page as the normal search, see
+// fetchJpcSearch). It does however NOT restrict to vinyl (just like the
+// normal search) -- a label facet specifically limited to vinyl was not
+// found in the sidebar.
 export async function fetchJpcLabelSearch(label: string): Promise<string> {
   const res = await fetch(`${PROXY_BASE}/s/${toJpcSearchPath(label)}?searchtype=label`, {
     headers: { Accept: "text/html" },
   });
-  // Gleiche Eigenheit wie bei der normalen Suche (siehe fetchJpcSearch): 0
-  // Treffer liefert HTTP 404 mit gültigem HTML-Body, kein echter Fehler.
+  // Same quirk as with the normal search (see fetchJpcSearch): 0 hits
+  // returns HTTP 404 with a valid HTML body, not a real error.
   if (!res.ok && res.status !== 404) {
     throw new Error(`JPC label search: HTTP ${res.status}`);
   }
   return res.text();
 }
 
-// Absprung-URL für die Anzeige -- exakt dieselbe URL, die auch gefetcht wird.
+// Jump-off URL for display -- exactly the same URL that is fetched too.
 export function jpcLabelUrl(label: string): string {
   return `https://www.jpc.de/s/${toJpcSearchPath(label)}?searchtype=label`;
 }

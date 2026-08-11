@@ -1,11 +1,13 @@
-// Soufflé Continu (soufflecontinu.com) — die Trefferliste der Such-Seite wird
-// NICHT serverseitig gerendert. Die Seite lädt nur ein leeres HTML-Grundgerüst
-// (<div class="cardContainer"></div>), die echten Treffer holt Client-JS erst
-// per AJAX nach (siehe shop.js: `new DisplayArticles(...)` -> `backendCall()`).
-// Verifiziert per Recon (XHR-Mitschnitt im Browser):
-//   GET /rest-api/shop/articles/?offset=0&count=<n>&search=<begriff>
-//   -> { rs: { articles: [...], pages, translations, ... } } als JSON.
-const PROXY_BASE = "/proxy/soufflecontinu";
+import { proxyBase } from "../../../lib/proxyBase";
+
+// Soufflé Continu (soufflecontinu.com) — the result list of the search page is
+// NOT rendered server-side. The page only loads an empty HTML skeleton
+// (<div class="cardContainer"></div>), the actual hits are fetched by client JS
+// via AJAX afterwards (see shop.js: `new DisplayArticles(...)` -> `backendCall()`).
+// Verified by recon (XHR capture in the browser):
+//   GET /rest-api/shop/articles/?offset=0&count=<n>&search=<term>
+//   -> { rs: { articles: [...], pages, translations, ... } } as JSON.
+const PROXY_BASE = proxyBase("soufflecontinu");
 
 export interface SouffleContinuArticle {
   ean: string;
@@ -42,32 +44,32 @@ export async function searchSouffleContinu(
   return res.json();
 }
 
-// Für die Label-Suche ("Small Label Suche" in der UI) — verifiziert per
-// Recon: es gibt kein Label-Suchfeld, dafür eine alphabetische
-// Label-Übersicht unter /labels/<buchstabe>/ (server-gerendertes HTML, ein
-// Buchstabe pro Seite, Ziffern-Labels laufen unter "0"). Jeder Eintrag ist
-// ein Link auf die eigentliche Label-Detailseite /label/<id>-<slug>/, die
-// wiederum alle Releases des Labels auflistet (siehe transform.ts).
+// For the label search ("Small Label Suche" in the UI) — verified by
+// recon: there is no label search field, but there is an alphabetical
+// label index under /labels/<letter>/ (server-rendered HTML, one
+// letter per page, labels starting with a digit live under "0"). Each entry is
+// a link to the actual label detail page /label/<id>-<slug>/, which
+// in turn lists all releases of the label (see transform.ts).
 export async function fetchSouffleContinuLabelsIndex(letter: string): Promise<string> {
   const res = await fetch(`${PROXY_BASE}/labels/${letter}/`, { headers: { Accept: "text/html" } });
   if (!res.ok) throw new Error(`Soufflé Continu labels index: HTTP ${res.status}`);
   return res.text();
 }
 
-// Live-Recon-Korrektur (die ursprüngliche Annahme unten war falsch): die
-// Label-Detailseite (/label/<id>-<slug>/) rendert ihre Trefferliste NICHT
-// serverseitig und NICHT komplett über das anfangs gefundene
-// "renderSelectionCards([...])"-Script -- letzteres ist nur ein gedeckeltes
-// "Notre sélection"-Vorschau-Widget (bei "Souffle Continu Records", einem
-// Label mit nachweislich 90 Treffern, enthielt dieses Script trotzdem nur 12
-// Einträge). Die echte, vollständige Trefferliste holt die Seite per
-// performance.getEntriesByType("resource") nachweislich per XHR nach:
-//   GET /rest-api/shop/articles/?offset=0&row_count=<n>&label=<numerische ID>
-//   -> { rs: { count, articles: [...], ... } } -- "count" ist die ECHTE
-//   Gesamtzahl, unabhängig vom angefragten row_count (mit row_count=1
-//   verifiziert: "count":90 trotz nur 1 zurückgegebenem Artikel). Exakt
-//   dasselbe Endpoint-Muster wie searchSouffleContinu oben, nur mit "label="
-//   statt "search=" als Filter-Parameter.
+// Live recon correction (the original assumption below was wrong): the
+// label detail page (/label/<id>-<slug>/) does NOT render its result list
+// server-side and NOT completely via the initially discovered
+// "renderSelectionCards([...])" script -- the latter is only a capped
+// "Notre sélection" preview widget (for "Souffle Continu Records", a
+// label with a demonstrable 90 hits, that script still contained only 12
+// entries). The real, complete result list is fetched by the page via
+// XHR, as demonstrated by performance.getEntriesByType("resource"):
+//   GET /rest-api/shop/articles/?offset=0&row_count=<n>&label=<numeric ID>
+//   -> { rs: { count, articles: [...], ... } } -- "count" is the REAL
+//   total, independent of the requested row_count (verified with
+//   row_count=1: "count":90 despite only 1 article returned). Exactly
+//   the same endpoint pattern as searchSouffleContinu above, just with "label="
+//   instead of "search=" as the filter parameter.
 export interface SouffleContinuLabelArticlesResponse {
   rs: { count: number };
 }

@@ -18,20 +18,20 @@ const GROUP_LABELS: Record<ShopGroup, string> = {
   "mail-order": "Mail Order",
 };
 
-// "fast" = normale HTTP-Suche (Ergebnis meist < 1s), "slow" = jede Suche
-// navigiert live durch einen Camoufox-Browser (siehe sidecar/) — deutlich
-// langsamer, aber der einzige Weg an manchen Shops (z.B. HHV) vorbei am
-// Bot-Schutz. Zwei separate Such-Zeilen im Formular machen den
-// Geschwindigkeitsunterschied für den User sichtbar, statt eine einzelne
-// Suche unvorhersehbar lange warten zu lassen.
+// "fast" = ordinary HTTP search (result usually < 1s), "slow" = every search
+// navigates live through a Camoufox browser (see sidecar/) — considerably
+// slower, but the only way past the bot protection at some shops (e.g.
+// HHV). Two separate search rows in the form make the speed difference
+// visible to the user, instead of leaving a single search to wait for an
+// unpredictable length of time.
 const SPEED_LABELS: Record<ShopSpeed, string> = {
   fast: "Schnell",
   slow: "Nicht ganz so Schnell",
 };
 
-// Eigener Wortlaut für die Shop-Icon-Übersicht (ShopShowcase) -- dort steht
-// kein Eingabefeld direkt daneben wie im Suchformular, deshalb "Suche ..."
-// statt nur des Tempo-Worts, um den Bezug klarer zu machen.
+// Separate wording for the shop icon overview (ShopShowcase) -- there is no
+// input field sitting right next to it as in the search form, hence
+// "Suche ..." instead of just the speed word, to make the reference clearer.
 const SHOWCASE_SPEED_LABELS: Record<ShopSpeed, string> = {
   fast: "Suche ist Schnell",
   slow: "Suche nicht ganz so Schnell",
@@ -44,10 +44,10 @@ interface ShopResult {
   error?: string;
 }
 
-// Ergebniszeile der "Small Label Suche" -- anders als ShopResult oben trägt
-// hier jeder Eintrag KEINE Trefferliste, sondern nur die Anzahl + einen
-// Absprunglink (siehe LabelSearchResult) bzw. "nicht unterstützt", wenn der
-// Shop-Adapter kein checkLabelAvailability implementiert (z.B. Bis Aufs
+// Result row of the "Small Label Suche" -- unlike ShopResult above, each
+// entry here carries NO list of hits, but only the number of matches plus a
+// jump-off link (see LabelSearchResult), or "nicht unterstützt" when the
+// shop adapter does not implement checkLabelAvailability (e.g. Bis Aufs
 // Messer).
 interface LabelShopResult {
   shop: ShopAdapter;
@@ -56,30 +56,29 @@ interface LabelShopResult {
   error?: string;
 }
 
-// Identifiziert eine Artist/Titel-Kombination für den "schon gesucht?"-
-// Vergleich der Go-Buttons (siehe GoState unten).
+// Identifies an artist/title combination for the "already searched?"
+// comparison made by the Go buttons (see GoState below).
 function queryKey(artist: string, title: string): string {
   return `${artist.trim()}::${title.trim()}`;
 }
 
-// disabled -> keine Eingabe / kein Format ausgewählt, nicht klickbar.
-// ready    -> klickbar, Eingabe unterscheidet sich von der zuletzt
-//             gesuchten Anfrage dieser Zeile (oder es wurde noch nie
-//             gesucht) -- goldener Hintergrund, wie bisher der einzige
-//             "aktiv"-Zustand.
-// done     -> klickbar, aber die aktuelle Eingabe entspricht exakt der
-//             zuletzt erfolgreich gesuchten Anfrage -- graue Fläche mit
-//             goldener Schrift, damit auf einen Blick klar ist "das steht
-//             schon unten in der Ergebnisliste", statt wie vorher ununter-
-//             scheidbar vom "bereit"-Zustand zu wirken.
+// disabled -> no input / no format selected, not clickable.
+// ready    -> clickable, the input differs from the query this row last
+//             searched for (or nothing has ever been searched) -- golden
+//             background, so far the only "active" state.
+// done     -> clickable, but the current input matches exactly the query
+//             that was last searched for successfully -- grey surface with
+//             golden text, so it is clear at a glance that "this is already
+//             in the result list below", instead of looking indistin-
+//             guishable from the "ready" state as it did before.
 type GoState = "disabled" | "ready" | "done";
 
 export default function App() {
-  // Zwei getrennte Feldpaare für die "Schnell"- und "Nicht ganz so
-  // Schnell"-Suchzeile. Eingaben in der schnellen Zeile werden automatisch
-  // in die langsame übernommen (einseitige Synchronisation, siehe
-  // useEffect unten) — wer zuerst oben tippt, muss unten nicht nochmal
-  // tippen. Umgekehrt (unten -> oben) wird bewusst NICHT synchronisiert.
+  // Two separate pairs of fields for the "Schnell" and "Nicht ganz so
+  // Schnell" search rows. Input in the fast row is carried over into the
+  // slow one automatically (one-way synchronisation, see the useEffect
+  // below) — whoever types in the upper row first does not have to type it
+  // again below. The reverse (bottom -> top) is deliberately NOT synced.
   const [artistFast, setArtistFast] = useState("");
   const [titleFast, setTitleFast] = useState("");
   const [artistSlow, setArtistSlow] = useState("");
@@ -92,9 +91,9 @@ export default function App() {
     setTitleSlow(titleFast);
   }, [titleFast]);
 
-  // Standardmäßig nur Vinyl angehakt — CD/Cassette/Download muss der User
-  // gezielt dazuwählen. Wenn er alle abwählt, gibt's unten eine Warnung
-  // statt stillschweigend wieder "alles zeigen".
+  // Only Vinyl is ticked by default — CD/Cassette/Download have to be added
+  // by the user deliberately. If they untick all of them, a warning appears
+  // below instead of silently reverting to "show everything".
   const [selectedFormats, setSelectedFormats] = useState<SelectableFormat[]>(["Vinyl"]);
 
   const [searchingFast, setSearchingFast] = useState(false);
@@ -102,28 +101,28 @@ export default function App() {
   const [searched, setSearched] = useState(false);
   const [shopResults, setShopResults] = useState<ShopResult[]>([]);
 
-  // Merkt sich pro Zeile, für welche Anfrage die aktuell angezeigten
-  // Ergebnisse zuletzt geholt wurden -- Grundlage für den "done"-Zustand
-  // der Go-Buttons (siehe GoState).
+  // Remembers, per row, which query the currently displayed results were
+  // last fetched for -- the basis for the "done" state of the Go buttons
+  // (see GoState).
   const [lastSearchedFastQuery, setLastSearchedFastQuery] = useState<string | null>(null);
   const [lastSearchedSlowQuery, setLastSearchedSlowQuery] = useState<string | null>(null);
 
   const [suggestions, setSuggestions] = useState<TitleSuggestion[]>([]);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
 
-  // "Small Label Suche" -- eigener Modus, der die Artist/Band-Felder als
-  // Label-Eingabe umwidmet (Album-Titel wird dabei unsichtbar). Nutzt
-  // bewusst dieselben artistFast/artistSlow-States wie die normale Suche
-  // (inkl. der bestehenden Fast->Slow-Sync) statt eigener Felder -- exakt
-  // das, was "Aktivieren dieser Checkbox ändert die Eingabefelder" meint.
+  // "Small Label Suche" -- a separate mode that repurposes the Artist/Band
+  // fields as label input (the album title becomes invisible). It uses the
+  // same artistFast/artistSlow states as the normal search on purpose
+  // (including the existing fast->slow sync) instead of its own fields --
+  // exactly what "ticking this checkbox changes the input fields" means.
   const [smallLabelMode, setSmallLabelMode] = useState(false);
   const [labelSearched, setLabelSearched] = useState(false);
   const [labelResults, setLabelResults] = useState<LabelShopResult[]>([]);
-  // Wie bei der normalen Suche: getrennt pro Zeile, damit beide Go-Buttons
-  // unabhängig ihren eigenen "schon gesucht?"-Zustand tracken (siehe
-  // GoState) -- Label-Suche ist NICHT mehr ein einzelner Klick für alle
-  // Shops, sondern wie die Album-Suche zwei getrennte Klicks (Fast-Shops /
-  // Slow-Shops).
+  // As with the normal search: kept separate per row, so that both Go
+  // buttons track their own "already searched?" state independently (see
+  // GoState) -- the label search is NO longer a single click for all
+  // shops, but, like the album search, two separate clicks (fast shops /
+  // slow shops).
   const [lastLabelSearchedFastQuery, setLastLabelSearchedFastQuery] = useState<string | null>(null);
   const [lastLabelSearchedSlowQuery, setLastLabelSearchedSlowQuery] = useState<string | null>(null);
 
@@ -131,8 +130,8 @@ export default function App() {
 
   const hasQueryFast = !!(artistFast.trim() || titleFast.trim());
   const hasQuerySlow = !!(artistSlow.trim() || titleSlow.trim());
-  // Format-Filter ist für die Label-Suche irrelevant (LabelSearchResult hat
-  // gar kein Format-Feld) -- dort reicht eine reine Eingabe.
+  // The format filter is irrelevant for the label search (LabelSearchResult
+  // has no format field at all) -- the input alone is enough there.
   const fastReady = smallLabelMode ? hasQueryFast : hasQueryFast && selectedFormats.length > 0;
   const slowReady = smallLabelMode ? hasQuerySlow : hasQuerySlow && selectedFormats.length > 0;
   const canSearchFast = fastReady && !searchingFast;
@@ -157,10 +156,10 @@ export default function App() {
     ? "done"
     : "ready";
 
-  // Beim Wechsel zur Ergebnisansicht legen wir einen eigenen History-Eintrag
-  // an. So führt der Browser-"Zurück"-Button zur Startseite der App zurück,
-  // statt die Seite komplett zu verlassen (was ohne eigenen History-Eintrag
-  // sonst passiert, da die App selbst keine URL-Änderungen vornimmt).
+  // When switching to the results view we push a history entry of our own.
+  // That way the browser's "back" button leads back to the app's start
+  // screen instead of leaving the page entirely (which is what happens
+  // without our own entry, since the app never changes the URL itself).
   useEffect(() => {
     const onPopState = () => {
       setSearched(false);
@@ -170,14 +169,14 @@ export default function App() {
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
-  // Vorschläge für den vollständigen Titel, debounced während der Eingabe in
-  // der schnellen Zeile (die langsame folgt automatisch, siehe oben).
-  // Bewusst NUR der Titel, nicht Artist+Titel kombiniert: eine kombinierte
-  // Anfrage killt die Trefferquote bei mehreren Quellen fast komplett (ANOST
-  // fällt bei "Aphex Twin Ambient" von 15 auf 2 Treffer gegenüber "Ambient"
-  // allein; SoundOhm/Souffle Continu erfassen den Artist-Namen in der Suche
-  // laut RECON.md gar nicht) — exakt das gleiche Muster, das die echten
-  // Shop-Adapter dafür schon berücksichtigen.
+  // Suggestions for the full title, debounced while typing in the fast row
+  // (the slow one follows automatically, see above). Deliberately ONLY the
+  // title, not artist and title combined: a combined query almost wipes out
+  // the hit rate across several sources (for "Aphex Twin Ambient" ANOST
+  // drops from 15 hits to 2 compared with "Ambient" on its own; according
+  // to RECON.md SoundOhm/Souffle Continu do not cover the artist name in
+  // their search at all) — exactly the same pattern the real shop adapters
+  // already take into account.
   useEffect(() => {
     const query = titleFast.trim();
     if (query.length < 3) {
@@ -196,12 +195,12 @@ export default function App() {
     setSelectedFormats((prev) => (prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f]));
   };
 
-  // Umschalten zwischen normaler Suche und "Small Label Suche" leert bewusst
-  // Artist/Band bzw. Small Label -- sonst bleibt z.B. ein zuvor eingetippter
-  // Artist-Name im (jetzt umbenannten) Feld stehen und wird versehentlich
-  // als Label-Name mitgesucht (musste vorher manuell gelöscht werden). Title
-  // wird ebenfalls geleert (auch wenn im Label-Modus ohnehin unsichtbar) --
-  // titleSlow/artistSlow folgen automatisch über die bestehende Sync-Effekte.
+  // Switching between the normal search and the "Small Label Suche"
+  // deliberately clears Artist/Band resp. Small Label -- otherwise a
+  // previously typed artist name stays in the (now renamed) field and is
+  // accidentally searched for as a label name (it had to be deleted by hand
+  // before). Title is cleared as well (invisible in label mode anyway) --
+  // titleSlow/artistSlow follow automatically via the existing sync effects.
   const toggleSmallLabelMode = () => {
     setSmallLabelMode((v) => !v);
     setArtistFast("");
@@ -209,24 +208,24 @@ export default function App() {
   };
 
   const applySuggestion = (s: TitleSuggestion) => {
-    // Immer setzen, auch wenn der Vorschlag keinen Artist mitbringt (z.B.
-    // liefert ANOST nie einen) -- sonst bleibt beim Klick ein alter,
-    // unpassender Artist im Feld stehen und die Suche kombiniert zwei
-    // Felder, die gar nicht zusammengehören (live beobachtet: "Aphex Twin"
-    // + ANOST-Vorschlag "Selected Ambient & ASMR Works 2001-2003", einer
-    // Ergo-Phizmiz-Hommage-Compilation -- 0 Treffer überall).
+    // Always set it, even when the suggestion carries no artist (ANOST, for
+    // example, never supplies one) -- otherwise an old, unsuitable artist
+    // stays in the field on click and the search combines two fields that
+    // do not belong together at all (observed live: "Aphex Twin" plus the
+    // ANOST suggestion "Selected Ambient & ASMR Works 2001-2003", an
+    // Ergo Phizmiz homage compilation -- 0 hits everywhere).
     setArtistFast(s.artist ?? "");
     setTitleFast(s.title);
     setSuggestionsOpen(false);
   };
 
-  // Beide Felder sind eine kombinierte UND-Suche — wer nur eins ändert und
-  // vergisst, dass im anderen noch der alte Wert steht, bekommt scheinbar
-  // "keine Treffer" (z.B. altes "Dustlick" im Titel + neuer Artist "Lovegod"
-  // -> niemand hat beides). Automatisches Erkennen einer "neuen" Suche ist
-  // zu unzuverlässig (jede Eingabe könnte auch eine Verfeinerung sein) —
-  // stattdessen ein expliziter Reset-Button, der alle Felder, Ergebnisse und
-  // Button-Zustände sauber auf Default zurücksetzt.
+  // Both fields form a combined AND search — change only one of them and
+  // forget that the old value is still in the other, and you apparently get
+  // "no hits" (e.g. an old "Dustlick" in the title + the new artist
+  // "Lovegod" -> nobody has both). Detecting a "new" search automatically
+  // is too unreliable (any input could just as well be a refinement) —
+  // instead there is an explicit reset button that puts all fields, results
+  // and button states cleanly back to their defaults.
   const resetSearch = () => {
     setArtistFast("");
     setTitleFast("");
@@ -244,21 +243,21 @@ export default function App() {
     setLastLabelSearchedSlowQuery(null);
   };
 
-  // Eigener, bewusst separater Button statt automatisch bei der Suche
-  // mitzuöffnen: das Verlassen unserer Seite soll eine explizite Aktion
-  // sein, kein Nebeneffekt von "Go" (siehe Fokus-Problem, das dadurch
-  // entstand). Kein Trick nötig, um den Fokus zu behalten — hier IST das
-  // Ziel, in den neuen Tab zu wechseln. Nutzt die schnelle Zeile, da die
-  // meist zuerst ausgefüllt wird.
+  // A button of its own, deliberately separate instead of being opened
+  // along with the search: leaving our page should be an explicit action,
+  // not a side effect of "Go" (see the focus problem that caused). No
+  // trick is needed to keep the focus — switching to the new tab IS the
+  // goal here. Uses the fast row, since that one is usually filled in
+  // first.
   //
-  // In der "Small Label Suche" trägt artistFast den Label-Namen (Titel ist
-  // dort ohnehin leer/unsichtbar) -- per Live-Recon verifiziert, dass beide
-  // Seiten dafür einen eigenen Label-Filter anbieten: Discogs' "type=label"
-  // filtert exakt auf Labels (verifiziert: "Balmat" -> genau 1 Treffer,
-  // "Blume" -> 84 Fuzzy-Treffer mit dem echten Label ganz oben). Bandcamp
-  // hat keinen reinen "nur Labels"-Filter, "item_type=b" ("artists & labels")
-  // ist die nächstliegende Kategorie und zeigt exakte Label-Treffer ebenfalls
-  // ganz oben (verifiziert mit "Balmat" und "Blume").
+  // In the "Small Label Suche" artistFast carries the label name (the title
+  // is empty/invisible there anyway) -- verified by live recon that both
+  // sites offer a dedicated label filter for this: Discogs' "type=label"
+  // filters on labels exactly (verified: "Balmat" -> exactly 1 hit,
+  // "Blume" -> 84 fuzzy hits with the real label right at the top).
+  // Bandcamp has no pure "labels only" filter, "item_type=b" ("artists &
+  // labels") is the closest category and likewise shows exact label hits
+  // right at the top (verified with "Balmat" and "Blume").
   const openDiscogs = () => {
     const query = smallLabelMode
       ? artistFast.trim()
@@ -273,14 +272,14 @@ export default function App() {
     );
   };
 
-  // Wie openDiscogs, nur Bandcamps eigene Suche statt Discogs -- Bandcamps
-  // Suche ist deutlich fuzzy-toleranter als Discogs (kombinierte
-  // Artist+Titel-Anfrage liefert live verifiziert direkt die richtigen
-  // Treffer oben, auch bei mehrteiligen Box-Sets), deshalb hier kein Hinweis
-  // auf "Titel sollte vollständig sein" nötig. item_type=a filtert auf
-  // "albums" (Bandcamps eigener Tab-Filter, per Recon in Chrome verifiziert)
-  // -- blendet sonst mitgelistete Einzeltrack-Treffer aus, die für einen
-  // Plattenladen-Check nicht relevant sind.
+  // Like openDiscogs, only with Bandcamp's own search instead of Discogs --
+  // Bandcamp's search is considerably more fuzzy-tolerant than Discogs' (a
+  // combined artist+title query was verified live to put the right hits
+  // straight at the top, even for multi-part box sets), so no hint about
+  // "the title should be complete" is needed here. item_type=a filters on
+  // "albums" (Bandcamp's own tab filter, verified by recon in Chrome)
+  // -- it hides the single-track hits that would otherwise be listed along
+  // with them and are not relevant for a record shop check.
   const openBandcamp = () => {
     const query = smallLabelMode
       ? artistFast.trim()
@@ -295,8 +294,8 @@ export default function App() {
     );
   };
 
-  // Gemeinsame Suchlogik für beide Zeilen: durchsucht nur die Shops der
-  // jeweiligen Geschwindigkeitsklasse.
+  // Shared search logic for both rows: searches only the shops of the
+  // respective speed class.
   const runSearch = async (speed: ShopSpeed, artistVal: string, titleVal: string) => {
     const targets = shops.filter((s) => s.speed === speed);
     if (targets.length === 0) return;
@@ -309,14 +308,14 @@ export default function App() {
     else setSearchingSlow(true);
 
     setShopResults((prev) => {
-      // Eine neue "Schnell"-Suche macht die zuletzt gezeigten "Nicht ganz so
-      // Schnell"-Ergebnisse potenziell ungültig: die Eingabe wurde ja per
-      // Sync auch in die untere Zeile übernommen, ohne dass diese schon neu
-      // gesucht hätte -- die alten Treffer dort gehören dann zu einer
-      // überholten Anfrage und werden deshalb mit entfernt. Umgekehrt (eine
-      // langsame Suche räumt die schnellen Ergebnisse auf) gibt es bewusst
-      // nicht, weil die schnelle Zeile nie durch die langsame überschrieben
-      // wird.
+      // A new "Schnell" search potentially invalidates the "Nicht ganz so
+      // Schnell" results shown last: the input was carried over into the
+      // lower row by the sync as well, without that row having searched
+      // again -- the old hits there then belong to a superseded query and
+      // are therefore removed along with it. The reverse case (a slow
+      // search clearing out the fast results) deliberately does not
+      // exist, because the fast row is never overwritten by the
+      // slow one.
       const keepOthers = speed === "fast" ? [] : prev.filter((r) => r.shop.speed !== speed);
       return [
         ...keepOthers,
@@ -351,12 +350,12 @@ export default function App() {
     }
   };
 
-  // Label-Suche ("Small Label Suche") -- wie runSearch oben nach
-  // Geschwindigkeitsklasse aufgeteilt: zwei getrennte Klicks (Fast-Shops /
-  // Slow-Shops), exakt dasselbe Muster wie bei der normalen Album-Suche.
-  // Beide Zeilen schreiben in dasselbe flache labelResults-Array (siehe
-  // LabelResultsList), das ergibt in Summe trotzdem die "alle Shops"-Liste,
-  // sobald beide Zeilen einmal gesucht haben.
+  // Label search ("Small Label Suche") -- split up by speed class like
+  // runSearch above: two separate clicks (fast shops / slow shops),
+  // exactly the same pattern as in the normal album search. Both rows
+  // write into the same flat labelResults array (see LabelResultsList),
+  // which in sum still yields the "all shops" list as soon as both rows
+  // have searched once.
   const runLabelSearch = async (speed: ShopSpeed, labelVal: string) => {
     const query = labelVal.trim();
     if (!query) return;
@@ -372,10 +371,10 @@ export default function App() {
     else setSearchingSlow(true);
 
     setLabelResults((prev) => {
-      // Gleiche Logik wie bei runSearch: eine neue "Schnell"-Suche macht die
-      // zuletzt gezeigten "Nicht ganz so Schnell"-Ergebnisse potenziell
-      // ungültig (Eingabe wurde per Sync auch unten übernommen), daher
-      // werden sie mit entfernt. Umgekehrt nicht.
+      // Same logic as in runSearch: a new "Schnell" search potentially
+      // invalidates the "Nicht ganz so Schnell" results shown last (the
+      // input was carried over into the lower row by the sync as well), so
+      // they are removed along with it. Not the other way round.
       const keepOthers = speed === "fast" ? [] : prev.filter((r) => r.shop.speed !== speed);
       return [...keepOthers, ...targets.map((shop) => ({ shop, status: "loading" as const }))];
     });
@@ -384,8 +383,8 @@ export default function App() {
     await Promise.all(
       targets.map(async (shop) => {
         if (!shop.checkLabelAvailability) {
-          // Kein Label-Suche-Adapter vorhanden (z.B. Bis Aufs Messer) --
-          // wird explizit als "nicht unterstützt" geführt, kein Fehler.
+          // No label search adapter available (e.g. Bis Aufs Messer) --
+          // recorded explicitly as "nicht unterstützt", not as an error.
           setLabelResults((prev) =>
             prev.map((r) =>
               r.shop.id === shop.id ? { ...r, status: "done" as const, result: { supported: false } } : r
@@ -438,18 +437,18 @@ export default function App() {
     runSearch("slow", artistSlow, titleSlow);
   };
 
-  // Nur Shops mit tatsächlichen Treffern (nach Format-Filter) oder einem
-  // Fehler werden angezeigt — leere/lädt-noch Shops bleiben unsichtbar.
+  // Only shops with actual hits (after the format filter) or with an error
+  // are displayed — empty/still-loading shops stay invisible.
   const withFiltered = shopResults.map((r) => ({
     ...r,
     filtered: r.results.filter((res) => matchesFormatFilter(res.format, selectedFormats)),
   }));
-  // Reihenfolge innerhalb einer Gruppe war bisher einfach die
-  // Einfüge-Reihenfolge in shopResults (= Deklarationsreihenfolge in
-  // shops/index.ts) -- wirkte dadurch beliebig/unvorhersehbar. Jetzt fest:
-  // erst alle "schnellen" Shops alphabetisch, danach alle "langsamen"
-  // Shops alphabetisch angehängt -- ergibt sich dynamisch aus shop.speed
-  // und shop.name, kein hartkodierter Shop-Name nötig.
+  // The order within a group used to be simply the insertion order in
+  // shopResults (= the declaration order in shops/index.ts) -- which came
+  // across as arbitrary/unpredictable. Now it is fixed: first all "fast"
+  // shops alphabetically, then all "slow" shops appended alphabetically
+  // -- derived dynamically from shop.speed and shop.name, no hardcoded
+  // shop name needed.
   const visibleByGroup = (group: ShopGroup) =>
     withFiltered
       .filter((r) => r.shop.group === group && (r.status === "error" || r.filtered.length > 0))
@@ -458,9 +457,9 @@ export default function App() {
         return a.shop.name.localeCompare(b.shop.name, "de");
       });
 
-  // Fertig durchsucht, aber 0 Treffer (nach Format-Filter) -- Shops mit
-  // Fehler tauchen schon in ihrer eigenen Karte auf, hier bewusst nicht
-  // nochmal gelistet, um nicht doppelt zu wirken.
+  // Finished searching, but 0 hits (after the format filter) -- shops with
+  // an error already show up in their own card and are deliberately not
+  // listed again here, so as not to look like duplicates.
   const searchedEmptyShopNames = withFiltered
     .filter((r) => r.status === "done" && r.filtered.length === 0)
     .map((r) => r.shop.name);
@@ -489,9 +488,9 @@ export default function App() {
       </div>
 
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 40px" }}>
-        {/* Suchformular */}
+        {/* Search form */}
         <div style={{ background: "#13151c", border: "1px solid #1e2128", borderRadius: 2, padding: "24px 28px" }}>
-          {/* Schnelle Zeile -- normale HTTP-Suche */}
+          {/* Fast row -- ordinary HTTP search */}
           <div style={{ marginBottom: 24 }}>
             <div style={{ fontSize: 10, letterSpacing: 3, color: "#c8a96e", textTransform: "uppercase", marginBottom: 10 }}>
               {SPEED_LABELS.fast}
@@ -572,7 +571,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* Langsame Zeile -- volle Camoufox-Browser-Navigation pro Suche */}
+          {/* Slow row -- full Camoufox browser navigation per search */}
           <div style={{ marginBottom: 24 }}>
             <div style={{ fontSize: 10, letterSpacing: 3, color: "#c8a96e", textTransform: "uppercase", marginBottom: 10 }}>
               {SPEED_LABELS.slow}
@@ -613,14 +612,14 @@ export default function App() {
             </div>
           </div>
 
-          {/* Format-Filter + Small-Label-Suche-Checkbox + Bandcamp/Discogs-
-              Sprungmarken in einer Zeile. Nur der Format-Filter ist für die
-              Label-Suche irrelevant (kein Format-Feld) und wird im
-              aktivierten Modus ausgeblendet -- Bandcamp/Discogs bleiben
-              sichtbar, weil beide auch eine Label-Suche unterstützen (siehe
-              openBandcamp/openDiscogs). Die Checkbox selbst bleibt ebenfalls
-              IMMER sichtbar, sonst könnte man den Modus nicht wieder
-              verlassen. */}
+          {/* Format filter + Small Label Suche checkbox + Bandcamp/Discogs
+              jump-off links in one row. Only the format filter is
+              irrelevant for the label search (no format field) and is
+              hidden while that mode is active -- Bandcamp/Discogs stay
+              visible, because both support a label search as well (see
+              openBandcamp/openDiscogs). The checkbox itself likewise stays
+              visible ALWAYS, otherwise there would be no way of leaving
+              the mode again. */}
           <div
             style={{
               display: "grid",
@@ -655,10 +654,10 @@ export default function App() {
               </div>
             )}
 
-            {/* "Small Label Suche" -- eigene Spalte mit etwas Abstand neben
-                dem Format-Filter, statt darunter, damit auf den ersten Blick
-                klar ist: das ist kein weiteres Format, sondern ein
-                eigenständiger Such-Modus (siehe smallLabelMode). */}
+            {/* "Small Label Suche" -- a column of its own with some space
+                next to the format filter instead of below it, so that it is
+                clear at first glance: this is not another format, but a
+                search mode in its own right (see smallLabelMode). */}
             <div>
               <div style={{ fontSize: 10, letterSpacing: 3, color: "#6b6e78", textTransform: "uppercase", marginBottom: 10 }}>
                 Small Label Suche
@@ -678,10 +677,10 @@ export default function App() {
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
-              {/* Eigene innere Spalte, linksbündig -- so richtet sich die
-                  Hinweiszeile am linken Rand des Button-Blocks aus (= linker
-                  Rand des Bandcamp-Buttons), während der ganze Block als
-                  Einheit weiterhin rechts sitzt. */}
+              {/* An inner column of its own, left-aligned -- this way the
+                  hint line lines up with the left edge of the button block
+                  (= the left edge of the Bandcamp button), while the whole
+                  block as a unit still sits on the right. */}
               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
                 <div style={{ display: "flex", gap: 10 }}>
                   <button onClick={openBandcamp} disabled={!hasQueryFast} style={externalLinkButtonStyle(hasQueryFast)}>
@@ -706,9 +705,9 @@ export default function App() {
           </div>
         </div>
 
-        {/* "Neue Suche" bewusst UNTER dem Formular statt oben im Header --
-            oben verschwand der Link beim Scrollen durch eine lange
-            Ergebnisliste aus dem sichtbaren Bereich. */}
+        {/* "Neue Suche" deliberately sits BELOW the form instead of at the
+            top in the header -- up there the link scrolled out of the
+            visible area while paging through a long list of results. */}
         {(hasQueryFast || hasQuerySlow || searched || labelSearched) && (
           <div style={{ textAlign: "right", padding: "18px 0 8px" }}>
             <button
@@ -733,7 +732,7 @@ export default function App() {
 
         <div style={{ height: 14 }} />
 
-        {/* Ergebnisse */}
+        {/* Results */}
         {smallLabelMode ? (
           labelSearched && (
             <div style={{ display: "flex", flexDirection: "column", gap: 36 }}>
@@ -752,7 +751,7 @@ export default function App() {
               return (
                 <div key={group}>
                   <div style={{ fontSize: 11, letterSpacing: 3, color: "#6b6e78", textTransform: "uppercase", marginBottom: 14 }}>
-                    {/* group ist ein ShopGroup-Union-Type, GROUP_LABELS deckt ihn per Record vollständig ab -- zur Compile-Zeit abgesichert. */}
+                    {/* group is a ShopGroup union type, GROUP_LABELS covers it completely via Record -- guaranteed at compile time. */}
                     {/* eslint-disable-next-line security/detect-object-injection */}
                     {GROUP_LABELS[group]}
                   </div>
@@ -861,8 +860,8 @@ export default function App() {
   );
 }
 
-// ANOST liefert kein einfach hotlinkbares Logo-Bild - dafür aber die exakten
-// SVG-Pfade aus dem eigenen Seiten-Header, die wir 1:1 als Vektor einbetten.
+// ANOST supplies no logo image that is easy to hotlink - but it does supply
+// the exact SVG paths from its own page header, which we embed 1:1 as vectors.
 function AnostLogo({ size }: { size: number }) {
   return (
     <svg
@@ -875,8 +874,8 @@ function AnostLogo({ size }: { size: number }) {
   );
 }
 
-// Platzhalter-Badge, solange keine echten Shop-Logos vorliegen (shop.logoUrl).
-// Einheitliche Größe, damit sich später echte Logos nahtlos einfügen.
+// Placeholder badge for as long as no real shop logos exist (shop.logoUrl).
+// Uniform size, so that real logos slot in seamlessly later on.
 function LogoBadge({ shop, size = 32 }: { shop: ShopAdapter; size?: number }) {
   if (shop.id === "anost") {
     return <AnostLogo size={size} />;
@@ -918,13 +917,13 @@ function LogoBadge({ shop, size = 32 }: { shop: ShopAdapter; size?: number }) {
   );
 }
 
-// Ergebnisliste der "Small Label Suche" -- bewusst anders aufgebaut als die
-// normale Trefferliste (visibleByGroup): keine Gruppierung nach
-// pickup-berlin/mail-order, keine Formatspalte, kein Ausblenden leerer
-// Shops. Stattdessen IMMER alle Shops in einer flachen, alphabetisch
-// sortierten Liste -- jeder Eintrag zeigt entweder eine anklickbare
-// Trefferanzahl (Absprung zur Shop-eigenen Seite) oder "nicht unterstützt"
-// (z.B. Bis Aufs Messer, das gar kein checkLabelAvailability implementiert).
+// Result list of the "Small Label Suche" -- deliberately built differently
+// from the normal hit list (visibleByGroup): no grouping by
+// pickup-berlin/mail-order, no format column, no hiding of empty shops.
+// Instead ALWAYS all shops in one flat, alphabetically sorted list -- each
+// entry shows either a clickable number of hits (jumping off to the shop's
+// own page) or "nicht unterstützt" (e.g. Bis Aufs Messer, which does not
+// implement checkLabelAvailability at all).
 function LabelResultsList({ results }: { results: LabelShopResult[] }) {
   if (results.length === 0) return null;
 
@@ -986,10 +985,10 @@ function LabelResultsList({ results }: { results: LabelShopResult[] }) {
   );
 }
 
-// Dekorative Logo-Vorschau -- "Pickup in Berlin" und "Mail Order" jetzt
-// nebeneinander (zwei Spalten), jede Spalte intern nochmal aufgeteilt in
-// "Schnell" (normale HTTP-Suche) und "Nicht ganz so Schnell" (volle
-// Camoufox-Browser-Navigation), passend zu den zwei Suchzeilen oben.
+// Decorative logo preview -- "Pickup in Berlin" and "Mail Order" now side
+// by side (two columns), each column split internally again into "Schnell"
+// (ordinary HTTP search) and "Nicht ganz so Schnell" (full Camoufox browser
+// navigation), matching the two search rows above.
 function ShopShowcase() {
   const groups: ShopGroup[] = ["pickup-berlin", "mail-order"];
   const speeds: ShopSpeed[] = ["fast", "slow"];
@@ -999,7 +998,7 @@ function ShopShowcase() {
       {groups.map((group) => (
         <div key={group}>
           <div style={{ fontSize: 11, letterSpacing: 3, color: "#6b6e78", textTransform: "uppercase", marginBottom: 18, textAlign: "center" }}>
-            {/* group ist ein ShopGroup-Union-Type, GROUP_LABELS deckt ihn per Record vollständig ab -- zur Compile-Zeit abgesichert. */}
+            {/* group is a ShopGroup union type, GROUP_LABELS covers it completely via Record -- guaranteed at compile time. */}
             {/* eslint-disable-next-line security/detect-object-injection */}
             {GROUP_LABELS[group]}
           </div>
@@ -1018,7 +1017,7 @@ function ShopShowcase() {
                     textAlign: "center",
                   }}
                 >
-                  {/* speed ist ein ShopSpeed-Union-Type, SHOWCASE_SPEED_LABELS deckt ihn per Record vollständig ab. */}
+                  {/* speed is a ShopSpeed union type, SHOWCASE_SPEED_LABELS covers it completely via Record. */}
                   {/* eslint-disable-next-line security/detect-object-injection */}
                   {SHOWCASE_SPEED_LABELS[speed]}
                 </div>
@@ -1053,9 +1052,9 @@ const fieldLabelStyle: React.CSSProperties = {
   marginBottom: 8,
 };
 
-// Gemeinsamer Style für "Go to Bandcamp"/"Go to Discogs" -- beide Buttons
-// verhalten sich identisch (aktiv/inaktiv je nach hasQueryFast), nur das
-// Ziel unterscheidet sich.
+// Shared style for "Go to Bandcamp"/"Go to Discogs" -- both buttons behave
+// identically (active/inactive depending on hasQueryFast), only the target
+// differs.
 function externalLinkButtonStyle(enabled: boolean): React.CSSProperties {
   return {
     background: enabled ? "#4a4d55" : "#1e2128",
@@ -1075,13 +1074,13 @@ function goButtonStyle(state: GoState): React.CSSProperties {
   const byState: Record<GoState, { background: string; color: string; cursor: string }> = {
     disabled: { background: "#1e2128", color: "#6b6e78", cursor: "not-allowed" },
     ready: { background: "#c8a96e", color: "#0d0f14", cursor: "pointer" },
-    // Graue Fläche mit goldener Schrift: signalisiert "diese exakte Anfrage
-    // steckt schon in der Ergebnisliste unten", damit man nicht rätseln
-    // muss, ob eine Suche schon durchgelaufen ist (siehe queryKey-Vergleich
-    // oben).
+    // Grey surface with golden text: signals "this exact query is already
+    // in the result list below", so that nobody has to puzzle over whether
+    // a search has already run through (see the queryKey comparison
+    // above).
     done: { background: "#3a3d45", color: "#c8a96e", cursor: "pointer" },
   };
-  // state ist ein GoState-Union-Type, byState deckt ihn per Record vollständig ab.
+  // state is a GoState union type, byState covers it completely via Record.
   // eslint-disable-next-line security/detect-object-injection
   const { background, color, cursor } = byState[state];
   return {

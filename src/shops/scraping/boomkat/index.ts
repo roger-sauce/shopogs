@@ -28,14 +28,14 @@ const boomkat: ShopAdapter = {
   homeUrl: "https://boomkat.com",
   logoUrl: "https://pbs.twimg.com/profile_images/779441514/BoomkatLogoTwitter01_400x400.jpg",
   type: "scraping",
-  // Läuft wie HHV über den Browser-Sidecar (volle Camoufox-Browser-
-  // Navigation statt direktem Reverse-Proxy) -- siehe api.ts.
+  // Runs through the browser sidecar like HHV (full Camoufox browser
+  // navigation instead of a direct reverse proxy) -- see api.ts.
   speed: "slow",
   async checkAvailability(artist, title) {
-    // Jede Suche baut im Sidecar eine eigene Camoufox-Session auf (siehe
-    // browserSession.js) -- egal ob die Suche erfolgreich war oder mit
-    // einem Fehler abbricht, muss diese Session danach geschlossen werden,
-    // sonst bleibt der Browser-Prozess bis zum Idle-Timeout offen.
+    // Every search sets up its own Camoufox session in the sidecar (see
+    // browserSession.js) -- no matter whether the search succeeded or
+    // aborted with an error, that session has to be closed afterwards,
+    // otherwise the browser process stays open until the idle timeout.
     try {
       const artistNeedle = artist.trim();
       const titleNeedle = title.trim();
@@ -43,15 +43,15 @@ const boomkat: ShopAdapter = {
 
       let releaseMatches: ReleaseMatch[] = [];
 
-      // Reine Artist-Suche (kein Titel): die Autocomplete-API liefert nur
-      // eine begrenzte, geranktes "Best Guess"-Liste (~10 Treffer) und kann
-      // bei kurzen/generischen Namen ein existierendes Release übersehen
-      // (live beobachtet: "Sees" per Titelsuche "Ampersand Curve" gefunden,
-      // aber per reiner Artist-Suche "Sees" nicht). Die Artist-
-      // Übersichtsseite /artists/<slug> listet dagegen alle Releases des
-      // Artists vollständig auf -- als primäre Quelle für Artist-only-Suchen
-      // versuchen, mit Fallback auf Autocomplete falls der Slug nicht
-      // existiert oder nichts liefert.
+      // Pure artist search (no title): the autocomplete API only returns a
+      // limited, ranked "best guess" list (~10 hits) and can miss an
+      // existing release for short/generic names (observed live: "Sees" was
+      // found via the title search "Ampersand Curve", but not via a pure
+      // artist search for "Sees"). The artist overview page
+      // /artists/<slug> on the other hand lists all of the artist's
+      // releases in full -- try it as the primary source for artist-only
+      // searches, with a fallback to autocomplete if the slug does not
+      // exist or returns nothing.
       if (!titleNeedle && artistNeedle) {
         try {
           const slug = slugifyArtist(artistNeedle);
@@ -67,12 +67,12 @@ const boomkat: ShopAdapter = {
         const query = [artist, title].filter(Boolean).join(" ").trim();
         const suggestions = await autocompleteBoomkat(query);
 
-        // Live-Recon (Stand jetzt) zeigt: Autocomplete liefert nur noch
-        // Release-Treffer direkt (kein separater "Artist"-Treffer-Typ mehr
-        // wie in der alten Recon dokumentiert) -- jeder Treffer hat schon
-        // Titel, Artist(s) und einen direkten Produktlink dabei.
-        // Wortgrenzen-Filter gegen Artist+Titel, gleiches Muster wie bei den
-        // anderen Shops.
+        // Live Recon (as of now) shows: autocomplete only returns release
+        // hits directly (no separate "Artist" hit type any more, as
+        // documented in the old Recon) -- every hit already comes with
+        // title, artist(s) and a direct product link.
+        // Word-boundary filter against artist+title, the same pattern as
+        // with the other shops.
         releaseMatches = suggestions
           .filter(
             (s) => s.type === "Release" && matchesQueryWords(`${s.artists.join(" ")} ${s.value}`, query)
@@ -101,9 +101,9 @@ const boomkat: ShopAdapter = {
     }
   },
   async checkLabelAvailability(label): Promise<LabelSearchResult> {
-    // Wie bei checkAvailability: jede Suche baut im Sidecar eine eigene
-    // Camoufox-Session auf, die danach unbedingt wieder geschlossen werden
-    // muss.
+    // As with checkAvailability: every search sets up its own Camoufox
+    // session in the sidecar, which absolutely has to be closed again
+    // afterwards.
     try {
       const needle = label.trim();
       if (!needle) return { supported: true, count: 0, url: "https://boomkat.com" };

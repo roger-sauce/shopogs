@@ -1,9 +1,9 @@
 import type { AvailabilityResult } from "../../../types/shop";
 import type { ShopifySuggestResponse } from "./api";
 
-// "Ausverkauft" = available:false -> kein Treffer. Explizite Vorbestellungen
-// tragen zusätzlich einen "Pre order"-Tag (verifiziert per Recon, z.B. "LIIEK
-// - Living In A Fiction LP PRE ORDER"), ansonsten kein Preorder-Konzept.
+// "Sold out" = available:false -> no hit. Explicit preorders additionally
+// carry a "Pre order" tag (verified by recon, e.g. "LIIEK - Living In A
+// Fiction LP PRE ORDER"), otherwise there is no preorder concept.
 function isPreorder(p: { title: string; tags?: string[] }): boolean {
   const inTags = p.tags?.some((t) => /pre.?order/i.test(t)) ?? false;
   const inTitle = /pre.?order/i.test(p.title);

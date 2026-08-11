@@ -1,4 +1,7 @@
-node_modules
+# Without ** the pattern only catches the top level. Since server/ exists,
+# its node_modules would otherwise have travelled into the build context and
+# overwritten the dependencies freshly installed inside the image.
+**/node_modules
 dist
 .git
 .DS_Store

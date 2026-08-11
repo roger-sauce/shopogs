@@ -2,12 +2,12 @@ import type { AvailabilityResult } from "../../../types/shop";
 import type { SouffleContinuArticle, SouffleContinuSearchResponse } from "./api";
 
 function extractPrice(priceHtml: string): string | undefined {
-  // priceHtml sieht z.B. so aus: '<span class="articlePrice">28.90€</span> '
-  // Ziffern-Wiederholungen bewusst auf {1,6}/{1,2} begrenzt (statt [\d]+) --
-  // keine reale ReDoS-Lücke bei so kurzen Preis-Strings (kein verschachteltes/
-  // mehrdeutiges Backtracking). Die security/detect-unsafe-regex-Heuristik
-  // zählt aber weiterhin die Quantifier-Konstrukte insgesamt -- bewusst
-  // unterdrückt statt den Regex weiter zu verbiegen.
+  // priceHtml looks e.g. like this: '<span class="articlePrice">28.90€</span> '
+  // Digit repetitions deliberately capped at {1,6}/{1,2} (instead of [\d]+) --
+  // no real ReDoS hole with price strings this short (no nested/ambiguous
+  // backtracking). The security/detect-unsafe-regex heuristic however still
+  // counts the quantifier constructs in total -- deliberately suppressed
+  // instead of contorting the regex any further.
   // eslint-disable-next-line security/detect-unsafe-regex
   const match = priceHtml.match(/(\d{1,6}(?:[.,]\d{1,2})?)\s*€/);
   return match ? match[1] : undefined;
@@ -32,17 +32,17 @@ export function transformSouffleContinu(
 }
 
 export interface SouffleContinuLabelEntry {
-  /** Numerische Label-ID aus der href, z.B. "4249" bei "/label/4249-blume/" -- wird für fetchSouffleContinuLabelArticleCount gebraucht (siehe api.ts). */
+  /** Numeric label ID from the href, e.g. "4249" in "/label/4249-blume/" -- needed for fetchSouffleContinuLabelArticleCount (see api.ts). */
   id: string;
-  /** href der Label-Detailseite, wie im Markup vorgefunden (kann absolut oder relativ sein). */
+  /** href of the label detail page, as found in the markup (can be absolute or relative). */
   href: string;
 }
 
-// Sucht in der alphabetischen Label-Übersichtsseite den Link, dessen Text
-// exakt dem gesuchten Label-Namen entspricht (case-insensitive), und gibt
-// dessen href + numerische ID zurück. null, wenn das Label auf dieser
-// Buchstaben-Seite nicht gelistet ist, oder die href nicht dem erwarteten
-// "/label/<id>-<slug>/"-Muster entspricht.
+// Looks in the alphabetical label overview page for the link whose text
+// matches the searched label name exactly (case-insensitive), and returns
+// its href + numeric ID. null when the label is not listed on this letter
+// page, or when the href does not match the expected "/label/<id>-<slug>/"
+// pattern.
 export function findSouffleContinuLabelEntry(html: string, label: string): SouffleContinuLabelEntry | null {
   const doc = new DOMParser().parseFromString(html, "text/html");
   const needle = label.trim().toLowerCase();

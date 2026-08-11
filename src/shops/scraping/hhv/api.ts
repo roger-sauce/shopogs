@@ -1,24 +1,26 @@
-// HHV (hhv.de) — Custom-Backend (Turbo/Hotwire). Die Katalog-Suchseite lädt
-// jedes Ergebnis als einzelnes lazy-loaded Turbo-Frame nach (Platzhalter mit
-// `src="/lazy/artikel/<id>/list_entry"` steht aber bereits im initialen
-// HTML-Response — das war der entscheidende Fund bei der zweiten Recon-Runde,
-// nachdem ein einfacher fetch() der Katalogseite zunächst KEINE Ergebnisse
-// zu enthalten schien).
-//
-// Ablauf:
-//   1) GET /records/katalog/filter/suche-D2N2S11?term=<begriff>
-//      -> enthält für jeden Treffer ein Turbo-Frame mit
-//         src="/lazy/artikel/<id>/list_entry"
-//   2) Für jede Artikel-ID: GET /lazy/artikel/<id>/list_entry
-//      -> server-gerendertes Fragment mit Artist/Titel/Format/Preis und dem
-//         Warenkorb-Button, dessen Modifier-Klasse den Lagerstatus verrät
-//         (siehe transform.ts).
-const PROXY_BASE = "/proxy/hhv";
-const DEFAULT_FACET = "D2N2S11";
-const MAX_ARTICLES = 20; // Begrenzung, um nicht zu viele Einzel-Requests zu feuern
+import { proxyBase } from "../../../lib/proxyBase";
 
-// Für die Label-Suche ("Small Label Suche" in der UI) wiederverwendet, damit
-// die Such-URL an genau einer Stelle gepflegt wird.
+// HHV (hhv.de) — custom backend (Turbo/Hotwire). The catalogue search page
+// loads every result as an individual lazy-loaded Turbo-Frame (but the
+// placeholder with `src="/lazy/artikel/<id>/list_entry"` is already present in
+// the initial HTML response — that was the decisive find during the second
+// recon round, after a plain fetch() of the catalogue page appeared at first
+// to contain NO results at all).
+//
+// Flow:
+//   1) GET /records/katalog/filter/suche-D2N2S11?term=<term>
+//      -> contains, for every hit, a Turbo-Frame with
+//         src="/lazy/artikel/<id>/list_entry"
+//   2) For every article ID: GET /lazy/artikel/<id>/list_entry
+//      -> server-rendered fragment with artist/title/format/price and the
+//         cart button, whose modifier class reveals the stock status
+//         (see transform.ts).
+const PROXY_BASE = proxyBase("hhv");
+const DEFAULT_FACET = "D2N2S11";
+const MAX_ARTICLES = 20; // Cap, so we do not fire off too many single requests
+
+// Reused for the label search ("Small Label Suche" in the UI), so that the
+// search URL is maintained in exactly one place.
 export const HHV_SEARCH_FACET = DEFAULT_FACET;
 
 export async function searchHhvArticleIds(query: string): Promise<string[]> {
@@ -40,10 +42,10 @@ export async function fetchHhvListEntry(articleId: string): Promise<string> {
   return res.text();
 }
 
-// Für die Label-Suche: dieselbe Katalog-Suchseite wie searchHhvArticleIds,
-// aber als rohes HTML zurückgegeben, weil hier (anders als bei der
-// Artist/Titel-Suche) nicht die einzelnen Artikel-IDs interessieren, sondern
-// ein evtl. vorhandener Label-Filter-Link mit data-title/data-path (siehe
+// For the label search: the same catalogue search page as
+// searchHhvArticleIds, but returned as raw HTML, because here (unlike in the
+// artist/title search) we do not care about the individual article IDs but
+// about a possibly present label filter link with data-title/data-path (see
 // transform.ts).
 export async function fetchHhvSearchPage(term: string): Promise<string> {
   const url = `${PROXY_BASE}/records/katalog/filter/suche-${DEFAULT_FACET}?term=${encodeURIComponent(
@@ -54,8 +56,8 @@ export async function fetchHhvSearchPage(term: string): Promise<string> {
   return res.text();
 }
 
-// Lädt eine beliebige, bereits von HHV gelieferte relative Pfad-URL (z.B.
-// einen data-path-Wert aus der Suchseite) über den gleichen Proxy/Sidecar.
+// Loads any relative path URL already supplied by HHV (e.g. a data-path value
+// from the search page) through the same proxy/sidecar.
 export async function fetchHhvPath(path: string): Promise<string> {
   const p = path.startsWith("/") ? path : `/${path}`;
   const res = await fetch(`${PROXY_BASE}${p}`, { headers: { Accept: "text/html" } });
@@ -63,12 +65,12 @@ export async function fetchHhvPath(path: string): Promise<string> {
   return res.text();
 }
 
-// Meldet dem Sidecar, dass diese Suche abgeschlossen ist -- schließt die
-// offene Camoufox-Session sofort, statt bis zum Idle-Timeout zu warten
-// (siehe sidecar/src/browserSession.js). Wird von checkAvailability() immer
-// per finally aufgerufen, auch bei Fehlern. Absichtlich robust: ein
-// fehlgeschlagener Close-Call darf die eigentliche Suche nicht zum Absturz
-// bringen, der Sidecar räumt notfalls per Idle-Timeout selbst auf.
+// Tells the sidecar that this search is finished -- closes the open Camoufox
+// session immediately instead of waiting for the idle timeout (see
+// sidecar/src/browserSession.js). Always called by checkAvailability() from a
+// finally block, including on errors. Deliberately robust: a failed close
+// call must not bring down the actual search, and if need be the sidecar
+// cleans up by itself via the idle timeout.
 export async function closeHhvSession(): Promise<void> {
   try {
     await fetch(`${PROXY_BASE}/__session/close`, { method: "POST" });

@@ -20,10 +20,10 @@ const hardWax: ShopAdapter = {
     const html = await fetchHardWaxSearch(query);
     const results = transformHardWax(html);
 
-    // Bisher ungefiltert -- Hard Wax' eigene Suche matcht offenbar breiter
-    // als nur "alle Wörter der Anfrage im Treffer" (live beobachtet: Suche
-    // "Sees" lieferte Treffer ganz ohne "Sees" in Artist/Titel). Gleicher
-    // Wortgrenzen-Filter wie bei JPC/HHV/Boomkat.
+    // Previously unfiltered -- Hard Wax' own search apparently matches more
+    // broadly than just "all words of the query in the hit" (observed live:
+    // searching "Sees" returned hits without "Sees" in artist/title at all).
+    // Same word-boundary filter as with JPC/HHV/Boomkat.
     return results.filter((r) => matchesQueryWords(`${r.artist ?? ""} ${r.title}`, query));
   },
   async checkLabelAvailability(label): Promise<LabelSearchResult> {
