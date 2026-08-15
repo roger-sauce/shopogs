@@ -1,0 +1,73 @@
+# SwiftLint for WaxStock.
+#
+# Same tuning as Crate: several defaults fight SwiftUI rather than the code.
+# View bodies are legitimately long, and trailing closures are how the
+# framework reads.
+
+included:
+  - WaxStock
+
+excluded:
+  - WaxStock/Assets.xcassets
+
+disabled_rules:
+  - multiple_closures_with_trailing_closure
+  - trailing_comma
+
+opt_in_rules:
+  - empty_count
+  - first_where
+  - last_where
+  - contains_over_filter_count
+  - redundant_nil_coalescing
+  - closure_spacing
+  - force_unwrapping
+  - explicit_init
+  - joined_default_parameter
+  - literal_expression_end_indentation
+  - operator_usage_whitespace
+  - toggle_bool
+
+# Only runs under `swiftlint analyze`, which needs a compiler log -- listing it
+# above would just print a warning on every plain run.
+analyzer_rules:
+  - unused_import
+
+line_length:
+  warning: 120
+  error: 200
+  ignores_comments: true
+  ignores_urls: true
+
+# A view with a form, a result list, a progress row and its previews runs long
+# without being unclear. The error thresholds still catch genuine sprawl.
+type_body_length:
+  warning: 400
+  error: 600
+
+file_length:
+  warning: 500
+  error: 800
+
+function_body_length:
+  warning: 80
+  error: 150
+
+identifier_name:
+  min_length:
+    warning: 1
+  excluded:
+    - id
+    - a
+    - b
+    - f
+    - na
+    - nb
+
+nesting:
+  type_level:
+    warning: 2
+
+cyclomatic_complexity:
+  warning: 12
+  error: 20

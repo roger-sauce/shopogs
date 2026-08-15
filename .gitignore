@@ -14,3 +14,10 @@ caddy/certs/
 /test/*
 # Local test overrides, host-specific
 docker-compose.override.yml
+
+# Xcode
+ios/**/xcuserdata/
+ios/**/*.xcuserstate
+ios/**/DerivedData/
+ios/**/build/
+ios/**/*.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist

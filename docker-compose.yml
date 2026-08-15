@@ -4,10 +4,14 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: shopogs
-    # No ports: entry any more. From outside, the Nginx Proxy Manager comes in
-    # via shared-proxy-net (shopogs:80), on the home network the caddy
-    # container via the project network -- both address the container name, a
-    # host port is not needed anywhere.
+    # No ports: entry. Two reverse proxies reach this container by name, and
+    # neither needs a host port: from the internet the public Caddy from
+    # konzert-guide over shared-proxy-net (shopogs:80), on the home network
+    # the caddy container below over the project network.
+    #
+    # Until 04.08.2026 the first of those was the Nginx Proxy Manager. The
+    # network and the container name stayed the same across that switch, which
+    # is why nothing here had to change -- only the comment, late.
     restart: unless-stopped
     depends_on:
       - browser-sidecar
@@ -64,10 +68,16 @@ services:
       # and Boomkat to the sidecar live. Maintaining it twice would mean
       # getting it wrong twice.
       SHOPOGS_PROXY_BASE: http://shopogs
-      # Unset = open, like /proxy/ already is today, so that the web app can
-      # reach the API without a login. A value here arms the bearer check
-      # without anything in the code having to be changed.
-      # SHOPOGS_API_KEY: "..."
+      # The shared secret WaxStock sends as a bearer token. Comes from the
+      # .env next to this file, which is not in the repo -- same pattern as
+      # BIND_ADDR below.
+      #
+      # Empty means open, and a fresh clone without a .env therefore behaves
+      # as before. That default matters less than it did: /api/ is reachable
+      # from the internet through the public Caddy, and a slow search starts
+      # a browser per request. The web app is unaffected either way -- it
+      # never calls /api/, it goes straight to /proxy/.
+      SHOPOGS_API_KEY: ${SHOPOGS_API_KEY:-}
     security_opt:
       - no-new-privileges:true
     # Node needs no kernel capabilities: no privileged port (3002), no user

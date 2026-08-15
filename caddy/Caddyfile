@@ -3,10 +3,15 @@
 # hence auto_https off -- Caddy should not ask Let's Encrypt for anything,
 # .local names cannot be certified there anyway.
 #
-# The Caddy runs on the project's Docker network and reaches shopogs by
-# container name. This means shopogs no longer needs a published host port --
-# the Nginx Proxy Manager addresses the container over shared-proxy-net as
-# well.
+# This Caddy runs on the project's Docker network and reaches shopogs by
+# container name. That is why shopogs needs no published host port -- the
+# public Caddy from konzert-guide reaches the same container over
+# shared-proxy-net, likewise by name.
+#
+# Two separate Caddies on purpose, not one: this one terminates TLS with a
+# mkcert certificate for extern.local on 5443, the public one holds the
+# Let's Encrypt certificate for ichmussdieseplattehaben.rogzilla.eu on 443.
+# Different certificate authorities, different lifecycles.
 {
 	auto_https off
 	admin off
@@ -18,10 +23,10 @@
 	# messages. The format is JSON, one line per request, with
 	# request.remote_ip and status.
 	#
-	# Preparation for the planned move from the Nginx Proxy Manager to
-	# Caddy: so far fail2ban reads NPM's lines with a filter that matches
-	# "[Client <IP>]". Caddy's JSON needs a filter of its own, and that can
-	# only be developed against real lines.
+	# Written for fail2ban. The move away from the Nginx Proxy Manager
+	# happened on 04.08.2026 -- its filter matched "[Client <IP>]", which no
+	# longer occurs anywhere. Caddy's JSON needs a filter of its own, and
+	# that can only be developed against real lines.
 	log
 	tls /certs/extern-local.pem /certs/extern-local-key.pem
 	reverse_proxy shopogs:80
