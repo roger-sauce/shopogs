@@ -77,6 +77,36 @@ enum WaxStockAPI {
         return http.statusCode == 200
     }
 
+    /// What a check of the settings can find.
+    ///
+    /// Three states rather than a boolean, because "nothing answered" and
+    /// "the key was refused" are different problems with different fixes --
+    /// one is the address or the server, the other is the field below it.
+    enum ServerProbe: Sendable {
+        case unreachable
+        case keyRefused
+        case ok
+    }
+
+    /// Reachability first, then one authenticated call.
+    ///
+    /// /api/shops is the cheapest route behind the key check: it reads a list
+    /// the server holds in memory and touches no shop.
+    static func probe(_ base: URL) async -> ServerProbe {
+        guard await isReachable(base) else { return .unreachable }
+
+        var request = URLRequest(url: base.appending(path: "api/shops"))
+        request.timeoutInterval = 12
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        if let key = ServerKey.value {
+            request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        }
+
+        guard let (_, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse else { return .unreachable }
+        return http.statusCode == 401 ? .keyRefused : .ok
+    }
+
     // MARK: - Shops
 
     private struct ShopsResponse: Decodable { let shops: [Shop] }
