@@ -21,3 +21,6 @@ ios/**/*.xcuserstate
 ios/**/DerivedData/
 ios/**/build/
 ios/**/*.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
+
+# Betriebswissen mit internen Adressen – wie KONTEXT-CRATE.md in discogs-roon
+KONTEXT-SHOPOGS.md
