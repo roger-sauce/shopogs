@@ -141,9 +141,39 @@ struct Shop: Decodable, Identifiable, Sendable {
     let group: ShopGroup
     let speed: ShopSpeed
     let homeUrl: URL?
+    /// Where the shop's mark lives. Comes from the adapter in
+    /// src/shops/<shop>/index.ts, so it is maintained once for the web app and
+    /// this one together. Seven of the eight have one.
+    ///
+    /// These point at third-party CDNs -- Gravatar, Wikimedia, Twitter, the
+    /// shops' own -- so loading them tells those hosts that someone is looking.
+    /// Acceptable for a shop logo; anything of substance goes through our own
+    /// server.
+    let logoUrl: URL?
     let supportsLabelSearch: Bool
 
-    /// Initials for the placeholder badge, used wherever no logo exists yet.
+    /// Marks shipped with the app rather than fetched. Two so far, for two
+    /// different reasons:
+    ///
+    ///   ANOST publishes no linkable image at all. Its own page header is
+    ///   plain SVG paths, which the web app already embeds verbatim -- the
+    ///   mark existed, it just had nowhere to be fetched from.
+    ///
+    ///   JPC's only mark is an SVG on Wikimedia, and AsyncImage cannot decode
+    ///   SVG. Bundled, it also stops depending on a third party staying up.
+    ///
+    /// Checked before logoUrl, so a bundled mark always wins.
+    private static let bundledMarks: [String: String] = [
+        "anost": "ANOST",
+        "jpc": "JPC"
+    ]
+
+    var assetName: String? {
+        Shop.bundledMarks[id]
+    }
+
+    /// Initials for the placeholder badge: no mark yet, or one that failed to
+    /// load.
     var initials: String {
         name.split(separator: " ").compactMap(\.first).prefix(2).map(String.init).joined().uppercased()
     }
@@ -151,24 +181,35 @@ struct Shop: Decodable, Identifiable, Sendable {
 
 #if DEBUG
 extension Shop {
-    /// Previews render from these and never touch the network.
+    /// Previews render from these and never touch the network -- which is why
+    /// logoUrl is nil throughout. ANOST still shows its mark, because that one
+    /// is bundled; the rest fall back to initials, so a preview shows both
+    /// branches at once.
     static let samples: [Shop] = [
         Shop(id: "hard-wax", name: "Hard Wax", country: "DE", group: .pickupBerlin,
-             speed: .fast, homeUrl: URL(string: "https://hardwax.com"), supportsLabelSearch: true),
+             speed: .fast, homeUrl: URL(string: "https://hardwax.com"),
+             logoUrl: nil, supportsLabelSearch: true),
         Shop(id: "anost", name: "ANOST", country: "DE", group: .pickupBerlin,
-             speed: .fast, homeUrl: URL(string: "https://www.anost.net"), supportsLabelSearch: true),
+             speed: .fast, homeUrl: URL(string: "https://www.anost.net"),
+             logoUrl: nil, supportsLabelSearch: true),
         Shop(id: "bis-aufs-messer", name: "Bis Aufs Messer", country: "DE", group: .pickupBerlin,
-             speed: .fast, homeUrl: URL(string: "https://bisaufsmesser.com"), supportsLabelSearch: false),
+             speed: .fast, homeUrl: URL(string: "https://bisaufsmesser.com"),
+             logoUrl: nil, supportsLabelSearch: false),
         Shop(id: "hhv", name: "HHV", country: "DE", group: .pickupBerlin,
-             speed: .slow, homeUrl: URL(string: "https://www.hhv.de"), supportsLabelSearch: true),
+             speed: .slow, homeUrl: URL(string: "https://www.hhv.de"),
+             logoUrl: nil, supportsLabelSearch: true),
         Shop(id: "jpc", name: "JPC", country: "DE", group: .mailOrder,
-             speed: .fast, homeUrl: URL(string: "https://www.jpc.de"), supportsLabelSearch: true),
+             speed: .fast, homeUrl: URL(string: "https://www.jpc.de"),
+             logoUrl: nil, supportsLabelSearch: true),
         Shop(id: "soundohm", name: "SoundOhm", country: "IT", group: .mailOrder,
-             speed: .fast, homeUrl: URL(string: "https://www.soundohm.com"), supportsLabelSearch: true),
+             speed: .fast, homeUrl: URL(string: "https://www.soundohm.com"),
+             logoUrl: nil, supportsLabelSearch: true),
         Shop(id: "souffle-continu", name: "Souffle Continu", country: "FR", group: .mailOrder,
-             speed: .fast, homeUrl: URL(string: "https://www.soufflecontinu.com"), supportsLabelSearch: true),
+             speed: .fast, homeUrl: URL(string: "https://www.soufflecontinu.com"),
+             logoUrl: nil, supportsLabelSearch: true),
         Shop(id: "boomkat", name: "Boomkat", country: "GB", group: .mailOrder,
-             speed: .slow, homeUrl: URL(string: "https://boomkat.com"), supportsLabelSearch: true)
+             speed: .slow, homeUrl: URL(string: "https://boomkat.com"),
+             logoUrl: nil, supportsLabelSearch: true)
     ]
 }
 

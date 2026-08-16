@@ -110,21 +110,61 @@ struct HitRow: View {
     }
 }
 
-/// A shop's mark, or its initials where there is none yet.
+/// A shop's mark, or its initials where none can be had.
 ///
-/// Same fallback as the web app: the shops have no usable logo assets so far,
-/// and initials at a fixed size mean real marks can slot in later without the
-/// layout moving.
+/// Three sources in order: a mark bundled with the app, the logoUrl the
+/// adapter carries, and the initials. The initials are not only the last
+/// resort but also what stands there while an image loads and if it never
+/// arrives -- so the row never changes height, whatever the network does.
 struct LogoBadge: View {
     let shop: Shop?
     var size: CGFloat = 28
 
     var body: some View {
+        content
+            .frame(width: size, height: size)
+            .background(hasMark ? AnyShapeStyle(.white) : AnyShapeStyle(.quaternary),
+                        in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    /// White behind a mark, on purpose and in both appearances. These logos
+    /// come from eight different places, several are dark ink on nothing, and
+    /// on a dark background they would simply disappear. The web app puts the
+    /// same white square behind them.
+    private var hasMark: Bool {
+        shop?.assetName != nil || shop?.logoUrl != nil
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let asset = shop?.assetName {
+            Image(asset)
+                .resizable()
+                .scaledToFit()
+                .padding(2)
+        } else if let url = shop?.logoUrl {
+            AsyncImage(url: url) { phase in
+                if case .success(let image) = phase {
+                    image
+                        .resizable()
+                        .scaledToFit()
+                        .padding(2)
+                } else {
+                    // Covers loading and failure alike. A logo is decoration;
+                    // a spinner for it would claim more attention than it is
+                    // worth, and a broken-image symbol says nothing useful.
+                    initials
+                }
+            }
+        } else {
+            initials
+        }
+    }
+
+    private var initials: some View {
         Text(shop?.initials ?? "?")
             .font(.system(size: size * 0.38, weight: .semibold))
             .foregroundStyle(.secondary)
-            .frame(width: size, height: size)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
     }
 }
 

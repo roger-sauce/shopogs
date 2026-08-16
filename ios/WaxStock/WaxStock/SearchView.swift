@@ -47,6 +47,7 @@ struct SearchView: View {
     /// asked for.
     @State private var formats: Set<VinylFormat> = [.vinyl]
     @State private var mode: SearchMode = .album
+    @State private var formatsOpen = false
 
     @State private var fast: SearchPhase = .idle
     @State private var slow: SearchPhase = .idle
@@ -122,7 +123,7 @@ struct SearchView: View {
 
                 // Irrelevant for a label search -- a label hit is a count, it
                 // has no format to filter on.
-                if mode == .album { formatMenu }
+                if mode == .album { formatChip }
 
                 Spacer(minLength: 0)
             }
@@ -151,19 +152,14 @@ struct SearchView: View {
         .autocorrectionDisabled()
     }
 
-    private var formatMenu: some View {
-        Menu {
-            ForEach(VinylFormat.allCases) { format in
-                Button {
-                    if formats.contains(format) { formats.remove(format) } else { formats.insert(format) }
-                } label: {
-                    if formats.contains(format) {
-                        Label(format.rawValue, systemImage: "checkmark")
-                    } else {
-                        Text(format.rawValue)
-                    }
-                }
-            }
+    /// A popover rather than a Menu.
+    ///
+    /// A Menu closes on the first tap, which makes picking two formats a
+    /// matter of opening it twice. A popover stays put until it is dismissed
+    /// by tapping outside it -- so the whole selection is one visit.
+    private var formatChip: some View {
+        Button {
+            formatsOpen = true
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "line.3.horizontal.decrease")
@@ -174,6 +170,62 @@ struct SearchView: View {
             .padding(.vertical, 6)
             .background(.regularMaterial, in: Capsule())
         }
+        .buttonStyle(.plain)
+        .popover(isPresented: $formatsOpen) {
+            formatPicker
+                // Without this a popover turns into a sheet on a phone, and a
+                // sheet for four checkboxes is a lot of furniture.
+                .presentationCompactAdaptation(.popover)
+        }
+    }
+
+    private var formatPicker: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Sets all four rather than toggling. "All" is a destination, not
+            // a switch -- the way back is unticking what is not wanted, which
+            // is the same gesture as narrowing down from anywhere else.
+            formatRow(title: "All", symbol: nil, isOn: formats.count == VinylFormat.allCases.count) {
+                formats = Set(VinylFormat.allCases)
+            }
+
+            Divider().padding(.horizontal, 14)
+
+            ForEach(VinylFormat.allCases) { format in
+                formatRow(title: format.rawValue, symbol: format.symbol,
+                          isOn: formats.contains(format)) {
+                    if formats.contains(format) {
+                        formats.remove(format)
+                    } else {
+                        formats.insert(format)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 6)
+        .frame(minWidth: 230)
+    }
+
+    private func formatRow(title: String, symbol: String?, isOn: Bool,
+                           action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
+                if let symbol {
+                    Image(systemName: symbol)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 22)
+                }
+                Text(title)
+                Spacer(minLength: 0)
+            }
+            // Without this only the label itself is tappable, and the row
+            // reads as one target.
+            .contentShape(Rectangle())
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+        }
+        .buttonStyle(.plain)
     }
 
     private var formatLabel: String {
