@@ -12,6 +12,14 @@ import Foundation
 enum ServerAddress {
     static let key = "waxstock.serverURL"
 
+    /// What the fields offer while nothing is stored.
+    ///
+    /// The public address, not the one on the home network: it answers from
+    /// anywhere, it carries a real certificate, and a phone is outside more
+    /// often than in. `https://extern.local:5443` reaches the same stack and
+    /// stays one edit away for anyone who wants it.
+    static let suggested = "https://ichmussdieseplattehaben.rogzilla.eu"
+
     static var url: URL? {
         UserDefaults.standard.string(forKey: key).flatMap(parse)
     }

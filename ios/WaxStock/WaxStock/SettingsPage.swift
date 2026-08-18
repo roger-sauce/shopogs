@@ -21,7 +21,7 @@ struct SettingsPage: View {
     var body: some View {
         Form {
             Section {
-                TextField("https://example.com", text: $address)
+                TextField(ServerAddress.suggested, text: $address)
                     .textContentType(.URL)
                     .keyboardType(.URL)
                     .autocorrectionDisabled()
@@ -52,9 +52,11 @@ struct SettingsPage: View {
                 // fails, so it is worth saying once rather than debugging
                 // twice.
                 Text("""
-                On the home network this is caddy, with a certificate from the \
-                local mkcert CA. A simulator keeps its own certificate store \
-                and needs that CA added once before it will trust the server.
+                The public address answers from anywhere and carries a real \
+                certificate. https://extern.local:5443 reaches the same stack \
+                on the home network, but through caddy with a certificate from \
+                the local mkcert CA — a simulator keeps its own certificate \
+                store and needs that CA added once before it will trust it.
                 """)
             }
 

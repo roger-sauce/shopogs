@@ -5,7 +5,10 @@ import SwiftUI
 struct SetupSheet: View {
     @Binding var configured: Bool
 
-    @State private var address = ""
+    /// Prefilled rather than left blank. There is exactly one server, and
+    /// typing a 40-character address on a phone to reach it is a toll with
+    /// nothing on the other side. Overwriting it is one tap.
+    @State private var address = ServerAddress.suggested
     @State private var checking = false
     @State private var failed = false
 
@@ -13,7 +16,7 @@ struct SetupSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("https://roon-bridge.local:5443", text: $address)
+                    TextField(ServerAddress.suggested, text: $address)
                         .textContentType(.URL)
                         .keyboardType(.URL)
                         .autocorrectionDisabled()
@@ -23,8 +26,9 @@ struct SetupSheet: View {
                     Text("Server address")
                 } footer: {
                     Text("""
-                    Where shopogs runs. On the home network that is caddy in \
-                    front of the app — the same address the browser uses.
+                    Where shopogs runs. The address above works from anywhere. \
+                    On the home network https://extern.local:5443 reaches the \
+                    same stack directly.
                     """)
                 }
 
