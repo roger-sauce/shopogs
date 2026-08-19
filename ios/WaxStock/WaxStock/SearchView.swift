@@ -273,9 +273,16 @@ struct SearchView: View {
 
     @ViewBuilder
     private var resultsSection: some View {
+        // Above the results, not below them: while the slow shops are still
+        // out there may be nothing to scroll past yet, and this is the part
+        // that says the search is under way.
+        if !shops.isEmpty {
+            SearchProgressStrip(shops: shops, progress: progress(for:), pending: pendingShops)
+        }
+
         if mode == .label {
             LabelResultsList(results: fast.labelHits + slow.labelHits, shops: shops)
-            slowProgressRow
+            errorNotes
         } else {
             ForEach(ShopGroup.allCases, id: \.self) { group in
                 let cards = visibleCards(in: group)
@@ -293,63 +300,77 @@ struct SearchView: View {
                 }
             }
 
-            slowProgressRow
+            errorNotes
             emptyNote
         }
     }
 
-    /// Sits below the fast results and names what is still being waited for.
-    /// Once those shops answer, it is replaced by their cards.
+    /// A whole class failing, as opposed to a single shop -- that case never
+    /// reaches the strip, because the server answers per shop and a class-wide
+    /// failure means there was no answer at all.
+    ///
+    /// The other class keeps its results either way.
     @ViewBuilder
-    private var slowProgressRow: some View {
-        if slow.isRunning {
-            HStack(spacing: 10) {
-                ProgressView()
-                Text(slowShopNames.isEmpty ? "Still searching…" : "Still searching \(slowShopNames)…")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.vertical, 4)
-        } else if let error = slow.error {
-            // The fast hits stay on screen -- one class failing must not take
-            // the other one's results with it.
-            Label("\(slowShopNames.isEmpty ? "Slow shops" : slowShopNames): \(error)",
-                  systemImage: "exclamationmark.triangle")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        }
-
+    private var errorNotes: some View {
         if let error = fast.error {
             Label("Fast shops: \(error)", systemImage: "exclamationmark.triangle")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
+        if let error = slow.error {
+            Label("\(slowShopNames.isEmpty ? "Slow shops" : slowShopNames): \(error)",
+                  systemImage: "exclamationmark.triangle")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
     }
 
+    /// The former "Searched, nothing found at: …" line is gone -- the strip
+    /// says the same thing with the marks themselves, and saying it twice was
+    /// once too often.
     @ViewBuilder
     private var emptyNote: some View {
-        let searchedEmpty = allEntries
-            .filter { entry in
-                guard !entry.failed else { return false }
-                return !entry.hits.contains { FormatClassifier.matches($0.format, selected: formats) }
-            }
-            .map { entry in shop(for: entry.shopId)?.name ?? entry.shopId }
-
-        if !fast.isRunning, !slow.isRunning {
-            if ShopGroup.allCases.allSatisfy({ visibleCards(in: $0).isEmpty }) {
-                ContentUnavailableView(
-                    "Nowhere in stock",
-                    systemImage: "questionmark.circle",
-                    description: Text(formats.isEmpty
-                                      ? "No format is selected."
-                                      : "None of the shops has this on \(formatLabel.lowercased()).")
-                )
-            } else if !searchedEmpty.isEmpty {
-                Text("Searched, nothing found at: \(searchedEmpty.joined(separator: ", "))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+        if !fast.isRunning, !slow.isRunning,
+           ShopGroup.allCases.allSatisfy({ visibleCards(in: $0).isEmpty }) {
+            ContentUnavailableView(
+                "Nowhere in stock",
+                systemImage: "questionmark.circle",
+                description: Text(formats.isEmpty
+                                  ? "No format is selected."
+                                  : "None of the shops has this on \(formatLabel.lowercased()).")
+            )
         }
+    }
+
+    /// Where a single shop stands right now. Reads from the phase of its own
+    /// speed class, so the fast shops report as soon as that request lands,
+    /// long before the slow one does.
+    private func progress(for shop: Shop) -> ShopProgress {
+        let phase = shop.speed == .fast ? fast : slow
+        switch phase {
+        case .idle, .running:
+            return .waiting
+        case .failed:
+            return .failed
+        case .albums(let entries):
+            guard let entry = entries.first(where: { $0.shopId == shop.id }) else { return .waiting }
+            if entry.failed { return .failed }
+            // Counted after the format filter, so the mark agrees with the
+            // cards below it rather than with the raw answer.
+            let n = entry.hits.filter { FormatClassifier.matches($0.format, selected: formats) }.count
+            return n > 0 ? .found(n) : .empty
+        case .labels(let entries):
+            guard let entry = entries.first(where: { $0.shopId == shop.id }) else { return .waiting }
+            if entry.failed { return .failed }
+            guard let result = entry.result, result.supported, let count = result.count, count > 0 else {
+                return .empty
+            }
+            return .found(count)
+        }
+    }
+
+    private var pendingShops: [Shop] {
+        shops.filter { progress(for: $0) == .waiting && (fast.isRunning || slow.isRunning) }
     }
 
     // MARK: - Deriving what to show
