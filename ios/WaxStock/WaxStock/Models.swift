@@ -131,6 +131,21 @@ struct ShopLabelHits: Decodable, Identifiable, Sendable {
     var failed: Bool { status == "error" }
 }
 
+/// A full title as one of the fast shops actually spells it.
+///
+/// The point of these is what normalising cannot do. The canonical fold on
+/// the server fixes what comes *back* — "Bjoerk" still matches a shop that
+/// wrote "Björk". It cannot fix what goes *out*: a shop whose own search does
+/// not understand "Bjoerk" returns nothing at all, and nothing is left to
+/// match. A suggestion replaces the typed text with a real catalogue entry,
+/// so the next search asks a question every shop can answer.
+struct TitleSuggestion: Decodable, Identifiable, Sendable {
+    let artist: String?
+    let title: String
+
+    var id: String { "\(artist ?? "")|\(title)" }
+}
+
 /// A shop as the server describes it. Fetched rather than hard-coded so
 /// adding a shop to src/shops/index.ts is enough -- this app needs no release
 /// for it.

@@ -147,6 +147,22 @@ enum WaxStockAPI {
         return try JSONDecoder().decode(LabelResponse.self, from: data).results
     }
 
+    private struct SuggestResponse: Decodable { let suggestions: [TitleSuggestion] }
+
+    /// Full titles for a fragment, drawn from the catalogues of the fast
+    /// shops. The server asks six of them and answers with at most eight, and
+    /// returns an empty list below three characters rather than an error.
+    ///
+    /// Deliberately the title alone, never artist and title together: a
+    /// combined query collapses the hit rate at the source. ANOST drops from
+    /// fifteen matches to two for "Aphex Twin Ambient" against "Ambient", and
+    /// SoundOhm and Souffle Continu do not index the artist in their search
+    /// at all.
+    static func suggest(_ query: String) async throws -> [TitleSuggestion] {
+        let data = try await get("api/suggest", [URLQueryItem(name: "q", value: query)])
+        return try JSONDecoder().decode(SuggestResponse.self, from: data).suggestions
+    }
+
     // MARK: - Jump-off points
 
     /// Bandcamp's own search. Far more forgiving of a half-remembered title

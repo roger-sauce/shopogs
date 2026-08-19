@@ -49,6 +49,12 @@ struct SearchView: View {
     @State private var mode: SearchMode = .album
     @State private var formatsOpen = false
 
+    @State private var suggestions: [TitleSuggestion] = []
+    /// Which query the current list belongs to. Applying a suggestion writes
+    /// the chosen title here, so the change to `title` does not immediately
+    /// fetch suggestions for the text that was just accepted.
+    @State private var suggestionsFor = ""
+
     @State private var fast: SearchPhase = .idle
     @State private var slow: SearchPhase = .idle
     @State private var searchTask: Task<Void, Never>?
@@ -85,6 +91,29 @@ struct SearchView: View {
             guard preloadedShops == nil, shops.isEmpty else { return }
             shops = (try? await WaxStockAPI.shops()) ?? []
         }
+        // The debounce, without a timer to manage: SwiftUI cancels and
+        // restarts this task on every change to `title`, so the sleep only
+        // runs out once typing pauses. Each call asks six shops -- firing per
+        // keystroke would make "Homogenic" nine rounds of that.
+        .task(id: title) {
+            let query = trimmedTitle
+            guard mode == .album, query.count >= 3 else {
+                suggestions = []
+                // Also forget which query the list belonged to, so retyping
+                // the same title after clearing the field offers again.
+                suggestionsFor = ""
+                return
+            }
+            guard query != suggestionsFor else { return }
+
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled else { return }
+
+            let found = (try? await WaxStockAPI.suggest(query)) ?? []
+            guard !Task.isCancelled else { return }
+            suggestions = found
+            suggestionsFor = query
+        }
     }
 
     // MARK: - Input
@@ -112,6 +141,8 @@ struct SearchView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+
+                suggestionList
             }
 
             HStack(spacing: 8) {
@@ -226,6 +257,74 @@ struct SearchView: View {
             .padding(.vertical, 9)
         }
         .buttonStyle(.plain)
+    }
+
+    /// Only while the album field has focus. Tapping one hands the fields
+    /// over to the shops' own spelling.
+    @ViewBuilder
+    private var suggestionList: some View {
+        if focusedField == .title, !suggestions.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                // Catalogue, not stock -- and the wording has to say so.
+                // /api/suggest reads the shops' search endpoints and takes
+                // the titles from whatever comes back; four of the six never
+                // look at availability at all. A shop knowing "Homogenic
+                // Live" says nothing about a copy being there, which is the
+                // question the search below answers.
+                Text("Titles shops know but might not be in stock")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
+                    .padding(.bottom, 2)
+
+                ForEach(Array(suggestions.enumerated()), id: \.element.id) { index, suggestion in
+                    if index > 0 { Divider().padding(.leading, 12) }
+                    Button {
+                        apply(suggestion)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(suggestion.title)
+                                .font(.subheadline)
+                            // The artist is shown even when there is none,
+                            // because taking this suggestion overwrites the
+                            // artist field either way. Seeing that beforehand
+                            // turns a surprise into a decision.
+                            if let artist = suggestion.artist, !artist.isEmpty {
+                                Text(artist)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text("no artist given")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+        }
+    }
+
+    /// The suggestion decides both fields, the artist included.
+    ///
+    /// That is the whole point: a suggestion carries the shops' own spelling,
+    /// so picking one repairs "Bjoerk" into "Björk" in the artist field too.
+    /// Where a suggestion brings no artist -- ANOST never does -- the field is
+    /// cleared rather than left alone, because the old artist plus a foreign
+    /// title is a combination no shop can have.
+    private func apply(_ suggestion: TitleSuggestion) {
+        artist = suggestion.artist ?? ""
+        title = suggestion.title
+        suggestionsFor = suggestion.title
+        suggestions = []
+        focusedField = nil
     }
 
     private var formatLabel: String {
@@ -414,6 +513,8 @@ struct SearchView: View {
         searchTask?.cancel()
         artist = ""
         title = ""
+        suggestions = []
+        suggestionsFor = ""
         fast = .idle
         slow = .idle
         hasSearched = false
