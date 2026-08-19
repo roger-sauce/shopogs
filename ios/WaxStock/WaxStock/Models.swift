@@ -142,8 +142,12 @@ struct ShopLabelHits: Decodable, Identifiable, Sendable {
 struct TitleSuggestion: Decodable, Identifiable, Sendable {
     let artist: String?
     let title: String
+    /// The carrier this entry comes on, in the shop's own wording. Only
+    /// entries that classify as one of the four formats reach the app at all
+    /// -- that is what keeps JPC's books and DVDs out.
+    let format: String?
 
-    var id: String { "\(artist ?? "")|\(title)" }
+    var id: String { "\(artist ?? "")|\(title)|\(format ?? "")" }
 }
 
 /// A shop as the server describes it. Fetched rather than hard-coded so

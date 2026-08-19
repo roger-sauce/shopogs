@@ -109,7 +109,7 @@ struct SearchView: View {
             try? await Task.sleep(for: .milliseconds(350))
             guard !Task.isCancelled else { return }
 
-            let found = (try? await WaxStockAPI.suggest(query)) ?? []
+            let found = (try? await WaxStockAPI.suggest(query, formats: formats)) ?? []
             guard !Task.isCancelled else { return }
             suggestions = found
             suggestionsFor = query
@@ -290,15 +290,20 @@ struct SearchView: View {
                             // because taking this suggestion overwrites the
                             // artist field either way. Seeing that beforehand
                             // turns a surprise into a decision.
-                            if let artist = suggestion.artist, !artist.isEmpty {
-                                Text(artist)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                Text("no artist given")
-                                    .font(.caption)
-                                    .foregroundStyle(.tertiary)
+                            HStack(spacing: 6) {
+                                if let artist = suggestion.artist, !artist.isEmpty {
+                                    Text(artist)
+                                        .foregroundStyle(.secondary)
+                                } else {
+                                    Text("no artist given")
+                                        .foregroundStyle(.tertiary)
+                                }
+                                if let format = suggestion.format {
+                                    Text("·").foregroundStyle(.tertiary)
+                                    Text(format).foregroundStyle(.secondary)
+                                }
                             }
+                            .font(.caption)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())

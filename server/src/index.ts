@@ -8,7 +8,13 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { shops } from "../../src/shops/index.ts";
 import { sanitizeSearchTerm } from "../../src/lib/inputValidation.ts";
 import { fetchTitleSuggestions } from "../../src/lib/titleSuggestions.ts";
-import type { AvailabilityResult, LabelSearchResult, ShopSpeed } from "../../src/types/shop.ts";
+import { SELECTABLE_FORMATS } from "../../src/lib/classifyFormat.ts";
+import type {
+  AvailabilityResult,
+  LabelSearchResult,
+  SelectableFormat,
+  ShopSpeed
+} from "../../src/types/shop.ts";
 
 // The same adapters that run in the browser -- only server-side here, so the
 // iPhone app gets finished hits instead of raw shop pages. The way out still
@@ -68,6 +74,24 @@ function firstValue(raw: unknown): string {
 function parseSpeed(raw: unknown): ShopSpeed | undefined {
   const value = firstValue(raw);
   return value === "fast" || value === "slow" ? value : undefined;
+}
+
+/**
+ * "Vinyl,CD" as sent by the app's format filter.
+ *
+ * Unknown names are dropped rather than rejected -- a client asking for a
+ * fifth format is asking for nothing, not making a mistake worth an error.
+ * An empty result means "no preference", which fetchTitleSuggestions reads
+ * as all four.
+ */
+function parseFormats(raw: unknown): SelectableFormat[] {
+  const value = firstValue(raw);
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part): part is SelectableFormat =>
+      (SELECTABLE_FORMATS as string[]).includes(part));
 }
 
 const app = express();
@@ -224,6 +248,11 @@ app.get("/api/label", async (req: Request, res: Response) => {
  * Suggestions for the full album title while only a fragment has been typed.
  * Uses the fast shops only -- a suggestion per keystroke must not start a
  * browser.
+ *
+ * `formats` carries the client's tick boxes, e.g. "Vinyl,CD". It is what
+ * keeps books and DVDs out: JPC is a general mail-order house, and its
+ * search answers "Homogenic" with a dissertation on elastostatics unless
+ * something insists on a carrier a record actually comes on.
  */
 app.get("/api/suggest", async (req: Request, res: Response) => {
   const query = sanitizeSearchTerm(firstValue(req.query.q)).trim();
@@ -234,7 +263,7 @@ app.get("/api/suggest", async (req: Request, res: Response) => {
 
   try {
     const suggestions = await withTimeout(
-      fetchTitleSuggestions(query),
+      fetchTitleSuggestions(query, parseFormats(req.query.formats)),
       TIMEOUT_MS.fast,
       "Suggestions"
     );

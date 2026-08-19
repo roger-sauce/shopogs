@@ -158,8 +158,18 @@ enum WaxStockAPI {
     /// fifteen matches to two for "Aphex Twin Ambient" against "Ambient", and
     /// SoundOhm and Souffle Continu do not index the artist in their search
     /// at all.
-    static func suggest(_ query: String) async throws -> [TitleSuggestion] {
-        let data = try await get("api/suggest", [URLQueryItem(name: "q", value: query)])
+    /// `formats` passes the tick boxes straight through. It is not a nicety:
+    /// it is what keeps books and DVDs out of the list, because JPC sells
+    /// those too and its search does not distinguish.
+    static func suggest(_ query: String, formats: Set<VinylFormat>) async throws -> [TitleSuggestion] {
+        let wanted = VinylFormat.allCases
+            .filter(formats.contains)
+            .map(\.rawValue)
+            .joined(separator: ",")
+        let data = try await get("api/suggest", [
+            URLQueryItem(name: "q", value: query),
+            URLQueryItem(name: "formats", value: wanted)
+        ])
         return try JSONDecoder().decode(SuggestResponse.self, from: data).suggestions
     }
 
