@@ -6,6 +6,7 @@ import { fetchHardWaxSearch } from "../shops/scraping/hardwax/api";
 import { transformHardWax } from "../shops/scraping/hardwax/transform";
 import { fetchJpcSearch } from "../shops/scraping/jpc/api";
 import { transformJpc } from "../shops/scraping/jpc/transform";
+import { matchesQueryWords } from "./relevance";
 
 export interface TitleSuggestion {
   artist?: string;
@@ -100,6 +101,18 @@ export async function fetchTitleSuggestions(query: string): Promise<TitleSuggest
 
   const seen = new Set<string>();
   return interleaved
+    // The same relevance rule the real search applies, and for the same
+    // reason: the shops match far more loosely than "every word of the query
+    // occurs in the hit". Without this the raw answers come through
+    // untouched, and JPC -- a general mail-order house that also sells books
+    // -- answered "Homogenic" with a dissertation on elastostatics and a
+    // textbook on homogeneous catalysis, because its search matched
+    // "homogen*". "Homogenic" is neither "homogene" nor "homogener", so the
+    // word-boundary check removes them.
+    //
+    // Against the title alone, not artist plus title: the query is a title
+    // fragment, and that is what the list promises to complete.
+    .filter((s) => matchesQueryWords(s.title, query))
     .filter((s) => {
       const key = `${s.artist ?? ""}::${s.title}`.toLowerCase();
       if (seen.has(key)) return false;
