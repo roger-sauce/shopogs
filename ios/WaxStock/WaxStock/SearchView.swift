@@ -49,6 +49,11 @@ struct SearchView: View {
     @State private var mode: SearchMode = .album
     @State private var formatsOpen = false
 
+    @State private var history = SearchHistory()
+    @State private var historyOpen = false
+    /// Shown when the list is full and the bookmark was tapped anyway.
+    @State private var historyFull = false
+
     @State private var suggestions: [TitleSuggestion] = []
     /// Which query the current list belongs to. Applying a suggestion writes
     /// the chosen title here, so the change to `title` does not immediately
@@ -87,6 +92,21 @@ struct SearchView: View {
             .padding(16)
         }
         .scrollDismissesKeyboard(.interactively)
+        .sheet(isPresented: $historyOpen) {
+            HistorySheet(history: history) { entry in
+                artist = entry.artist
+                title = entry.title
+                // The entry is a finished search, not a fragment -- offering
+                // to complete it would be answering a question nobody asked.
+                suggestionsFor = entry.title
+                suggestions = []
+                focusedField = nil
+            }
+        }
+        // The warning belongs to the list as it was, not to the next thing
+        // typed.
+        .onChange(of: artist) { historyFull = false }
+        .onChange(of: title) { historyFull = false }
         .task {
             guard preloadedShops == nil, shops.isEmpty else { return }
             shops = (try? await WaxStockAPI.shops()) ?? []
@@ -120,6 +140,8 @@ struct SearchView: View {
 
     private var inputCard: some View {
         VStack(alignment: .leading, spacing: 12) {
+            historyButton
+
             // One field pair, not two rows. Both speed classes start from the
             // same input; keeping a second copy in sync was the web app's
             // problem, not a feature worth carrying over.
@@ -156,7 +178,15 @@ struct SearchView: View {
                 // has no format to filter on.
                 if mode == .album { formatChip }
 
+                bookmarkChip
+
                 Spacer(minLength: 0)
+            }
+
+            if historyFull {
+                Text("History full — delete an entry first.")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
             }
 
             if mode == .album, formats.isEmpty {
@@ -181,6 +211,59 @@ struct SearchView: View {
         }
         .textInputAutocapitalization(.words)
         .autocorrectionDisabled()
+    }
+
+    /// Above the fields, because that is where one reaches before typing
+    /// rather than after.
+    private var historyButton: some View {
+        HStack {
+            Button {
+                historyOpen = true
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "clock.arrow.circlepath")
+                    Text("History")
+                    if !history.entries.isEmpty {
+                        Text("\(history.entries.count)")
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .font(.caption)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(.regularMaterial, in: Capsule())
+            }
+            .buttonStyle(.plain)
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// Puts the current search aside for another week.
+    ///
+    /// Symbol only: the row it sits in already carries the mode picker and
+    /// the format filter, and a bookmark says this without a word. Filled
+    /// once this exact search is on the list, so tapping twice is visibly
+    /// pointless rather than silently so.
+    private var bookmarkChip: some View {
+        Button {
+            historyFull = !history.add(artist: trimmedArtist, title: trimmedTitle)
+        } label: {
+            Image(systemName: bookmarked ? "bookmark.fill" : "bookmark")
+                .font(.caption)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(.regularMaterial, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(!hasQuery)
+        .opacity(hasQuery ? 1 : 0.4)
+        .accessibilityLabel("Add to history")
+    }
+
+    private var bookmarked: Bool {
+        hasQuery && history.contains(artist: trimmedArtist, title: trimmedTitle)
     }
 
     /// A popover rather than a Menu.
