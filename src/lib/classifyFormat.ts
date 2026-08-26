@@ -7,26 +7,40 @@ export const SELECTABLE_FORMATS: SelectableFormat[] = ["Vinyl", "CD", "Cassette"
 // filter categories. Not every adapter delivers a format field — in that
 // case the hit is only displayed if all 4 formats really are selected
 // (see matchesFormatFilter).
+//
+// The branches below are written against what the eight shops actually send,
+// collected in one sweep over the live API: "2CD", "LP (yellow)", "2 LPs",
+// "2Tape", "Single 12\"", "K7 / tape", "10”". Anything that is deliberately
+// none of the four -- "Book", "Livre", "Buch", "Blu-ray Disc", HHV's bare
+// "Box" -- stays unclassified on purpose.
 export function classifyFormat(rawFormat: string | undefined): SelectableFormat | undefined {
   if (!rawFormat) return undefined;
   const f = rawFormat.toLowerCase();
 
   if (/mp3|wav|flac|aiff|download|digital/.test(f)) return "Download";
-  if (/cassette|tape|\bmc\b/.test(f)) return "Cassette";
-  // (?<![a-z])cds?\b instead of \bcds?\b: some shops deliver quantities like
-  // "3 CDs" (verified at JPC) — without the "s?" \bcd\b does not match that,
-  // because there is no word end between "d" and "s".
-  // Bugfix: box sets like "9CD Box" (verified at SoundOhm, Merzbow "Nine
-  // Studies...") were still never recognised as CD -- \b is a
-  // word/non-word boundary, but digits themselves count as word characters,
-  // so between "9" and "c" in "9cd" there is NO \b boundary AT ALL; the
-  // leading \b in \bcds?\b therefore failed as a matter of principle as soon
-  // as a digit stood directly before "CD". Negative lookbehind instead of a
-  // leading \b: it only forbids an immediately preceding a-z (still guards
-  // against false hits like "recorded"), but allows digits/start of string
-  // directly in front of it.
-  if (/(?<![a-z])cds?\b/.test(f)) return "CD";
-  if (/lp|"|vinyl|12"|10"|7"|ep\b/.test(f)) return "Vinyl";
+  // Abbreviations, and why a plain \b cannot carry them:
+  //
+  //   ANOST writes cassettes as "CS", sets of them as "2CS" and "3CS"
+  //   (verified on the Sucata Tapes label page, where every release is a
+  //   tape). JPC writes "MC", Soufflé Continu "K7 / tape".
+  //
+  //   A quantity in front must not rule the token out, a letter must --
+  //   otherwise "classics", "discs" and "boxcd" would all count as formats.
+  //   \b cannot say that: digits are word characters themselves, so between
+  //   "9" and "cd" in "9CD Box" there is no boundary AT ALL, and \bcds?\b
+  //   failed as a matter of principle as soon as a digit stood in front.
+  //   Hence the negative lookbehind, plus one exception for the "3xCD"
+  //   spelling, where the x has to earn its keep with a digit before it or
+  //   "maxcd" would slip through.
+  if (/cassette|tape|(?:(?<![a-z])|(?<=\dx))(?:cs|mc|k7)\b/.test(f)) return "Cassette";
+  // Same rule, plus the trailing s for quantities like "3 CDs" (JPC).
+  if (/(?:(?<![a-z])|(?<=\dx))cds?\b/.test(f)) return "CD";
+  // The inch mark comes in four spellings across the shops: Hard Wax sends
+  // the ASCII quote in '10"', ANOST the typographic one in '10”'. Both are
+  // listed, together with the double prime that is typographically the
+  // correct sign, because a record that spells its size differently is still
+  // a record. "inch" is HHV's wording ("7inch").
+  if (/lp|vinyl|ep\b|inch|["“”″]/.test(f)) return "Vinyl";
 
   return undefined;
 }

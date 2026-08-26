@@ -34,11 +34,20 @@ enum VinylFormat: String, CaseIterable, Identifiable, Sendable {
 ///     as word characters themselves and there is no boundary between "9" and
 ///     "c". What rules a match out is a *letter* directly in front, which
 ///     still catches "recorded".
+///   - "CS", "2CS", "3CS" (ANOST): the same shape again, for cassettes. Until
+///     this was here, ANOST tapes only showed up with all four ticked.
+///   - "10”" (ANOST): a typographic inch mark, not the ASCII quote Hard Wax
+///     sends. Every ANOST 10 and 12 inch was invisible under the Vinyl filter
+///     because of that one character.
 ///
 /// Written by hand rather than with a regex: the original needs a negative
 /// lookbehind, and reproducing that across two regex engines is a promise
 /// this code would have to keep on every OS release.
 enum FormatClassifier {
+    /// Every spelling of the inch mark seen in the wild, plus the double
+    /// prime that is typographically the correct one.
+    private static let inchMarks: Set<Character> = ["\"", "\u{201C}", "\u{201D}", "\u{2033}"]
+
     static func classify(_ raw: String?) -> VinylFormat? {
         guard let raw, !raw.isEmpty else { return nil }
         let f = raw.lowercased()
@@ -46,13 +55,20 @@ enum FormatClassifier {
         if ["mp3", "wav", "flac", "aiff", "download", "digital"].contains(where: f.contains) {
             return .download
         }
-        if f.contains("cassette") || f.contains("tape") || containsWord("mc", in: f) {
+        if f.contains("cassette") || f.contains("tape")
+            || containsToken("cs", in: f, plural: false)     // ANOST: "CS", "2CS", "3CS"
+            || containsToken("mc", in: f, plural: false)     // JPC
+            || containsToken("k7", in: f, plural: false) {   // Soufflé Continu
             return .cassette
         }
-        if containsCD(in: f) {
+        if containsToken("cd", in: f, plural: true) {
             return .cd
         }
-        if f.contains("lp") || f.contains("\"") || f.contains("vinyl") || endsWord("ep", in: f) {
+        // The inch mark arrives in more than one spelling: Hard Wax sends the
+        // ASCII quote in "10\"", ANOST the typographic one in "10”". Both
+        // count, and so does HHV's "7inch".
+        if f.contains("lp") || f.contains("vinyl") || endsWord("ep", in: f)
+            || f.contains("inch") || f.contains(where: Self.inchMarks.contains) {
             return .vinyl
         }
         return nil
@@ -82,19 +98,6 @@ enum FormatClassifier {
         c.isASCII && c.isLetter
     }
 
-    /// `\bword\b`
-    private static func containsWord(_ word: String, in text: String) -> Bool {
-        let chars = Array(text), needle = Array(word)
-        guard chars.count >= needle.count else { return false }
-        for start in 0...(chars.count - needle.count) where Array(chars[start..<start + needle.count]) == needle {
-            let before = start > 0 ? chars[start - 1] : nil
-            let afterIndex = start + needle.count
-            let after = afterIndex < chars.count ? chars[afterIndex] : nil
-            if !(before.map(isWordChar) ?? false) && !(after.map(isWordChar) ?? false) { return true }
-        }
-        return false
-    }
-
     /// `word\b` -- boundary only at the end, exactly like `ep\b` in the
     /// original. Without that, "deep" would count as a hit for Vinyl.
     private static func endsWord(_ word: String, in text: String) -> Bool {
@@ -108,14 +111,23 @@ enum FormatClassifier {
         return false
     }
 
-    /// `(?<![a-z])cds?\b`
-    private static func containsCD(in text: String) -> Bool {
-        let chars = Array(text)
-        guard chars.count >= 2 else { return false }
-        for i in 0...(chars.count - 2) where chars[i] == "c" && chars[i + 1] == "d" {
-            if i > 0, isAsciiLetter(chars[i - 1]) { continue }
-            var end = i + 2
-            if end < chars.count, chars[end] == "s" { end += 1 }
+    /// `(?:(?<![a-z])|(?<=\dx))<token>s?\b`
+    ///
+    /// A letter directly in front rules the match out, a quantity does not:
+    /// "9CD Box", "2CS" and "3xCD" are the format, "classics", "discs" and
+    /// "boxcd" are not. The x has to earn its exception with a digit before
+    /// it, otherwise "maxcd" would count too. The trailing s is only for CD
+    /// ("3 CDs"); no shop pluralises the others.
+    private static func containsToken(_ token: String, in text: String, plural: Bool) -> Bool {
+        let chars = Array(text), needle = Array(token)
+        guard chars.count >= needle.count else { return false }
+        for start in 0...(chars.count - needle.count) where Array(chars[start..<start + needle.count]) == needle {
+            if start > 0, isAsciiLetter(chars[start - 1]) {
+                let quantified = chars[start - 1] == "x" && start > 1 && chars[start - 2].isNumber
+                if !quantified { continue }
+            }
+            var end = start + needle.count
+            if plural, end < chars.count, chars[end] == "s" { end += 1 }
             let after = end < chars.count ? chars[end] : nil
             if !(after.map(isWordChar) ?? false) { return true }
         }
