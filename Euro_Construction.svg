@@ -1,0 +1,61 @@
+﻿
+<svg fill="none" stroke="#000" viewBox="0 0 620 560" xmlns="http://www.w3.org/2000/svg">
+
+<marker id="arrow" overflow="visible" orient="auto">
+<path d="m8 0 4-4-12 4 12 4z" fill="#000"/>
+</marker>
+
+<path id="euroSign" d="m336 64a213 213 0 0 0-206 159h-43l-15 36h52a213 213 0 0 0 0 35h-37l-15 36h58a213 213 0 0 0 342 111v-49a178 178 0 0 1-306-62h237l14-36h-258a178 178 0 0 1 0-35h273l14-36h-280a178 178 0 0 1 306-61l15-35a213 213 0 0 0-151-63" fill="#ddd" stroke-width="3"/>
+
+<path d="m610 277h-233m-22 0h-135m-21 0h-189m326-260v529" stroke-dasharray="8,4,2,4"/>
+<path d="m177 82-150 356m114-343-114 273m494-325-194 469" stroke-dasharray="12,3"/>
+<path d="m71 207v339m266-482h273m-273 426h273m-487-214v-259m349 145v301m40-335-176 149 160 134m-160-312h-99" stroke-dasharray="2,2"/>
+
+<g marker-start="url(#arrow)">
+<path d="m250 100v50"/>
+<path d="m124 28h96"/>
+<path d="m335 28h-95"/>
+<path d="m72 535h102"/>
+<path d="m335 535h-122"/>
+<path d="m230 417 19-23"/>
+<path d="m206 448-19 23"/>
+<path d="m210 296v23"/>
+<path d="m210 257v-23"/>
+<path d="m250 261v23"/>
+<path d="m250 221v-46"/>
+<path d="m290 332v23"/>
+<path d="m290 292v-23"/>
+<path d="m598 65v94"/>
+<path d="m598 276v-92"/>
+<path d="m598 278v94"/>
+<path d="m598 489v-92"/>
+<path d="m536 278c0 21-3 39-9 58"/>
+<path d="m490 404c12-14 21-29 30-47"/>
+<path d="m490 149c12 14 20 28 28 45"/>
+<path d="m536 276c0-20-3-38-10-58"/>
+</g>
+
+<g fill="#000" font-family="Arial" font-size="24" stroke="none">
+<text x="203" y="285">1</text>
+<text x="243" y="249">1</text>
+<text x="283" y="320">1</text>
+<text x="210" y="440">1</text>
+<text x="224" y="36">6</text>
+<text x="590" y="180">6</text>
+<text x="590" y="393">6</text>
+<text x="177" y="543">7,5</text>
+<text x="507" y="215">40°</text>
+<text x="507" y="355">40°</text>
+<text x="234" y="169">3,5</text>
+<text x="132" y="86">J</text>
+<text x="16" y="393">I</text>
+<text x="172" y="74">H</text>
+<text x="13" y="463">G</text>
+<text x="518" y="125">F</text>
+<text x="522" y="36">E</text>
+<text x="438" y="171">D</text>
+<text x="342" y="515">C</text>
+<text x="306" y="524">B</text>
+<text x="358" y="285">A</text>
+</g>
+</svg>
