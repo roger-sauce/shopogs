@@ -17,7 +17,24 @@ WORKDIR /app
 # package-lock.json -- that appears on the first `npm install` inside server/
 # and belongs in the repo afterwards.
 COPY server/package*.json ./server/
-RUN cd server && npm ci --omit=dev
+
+# npm goes out again in the same layer, so its own bundled dependencies do not
+# stay behind in the image at all.
+#
+# It is needed for exactly this one command; at runtime nothing calls it (see
+# CMD below, which runs the tsx binary directly). It was also, by count, the
+# entire attack surface this image had: of the eleven findings in the Trivy
+# report of 06.09.2026 -- one of them CRITICAL, a gzip-bomb DoS in tar --
+# every single one sat in npm's own node_modules (tar, pacote, sigstore,
+# brace-expansion, ip-address, picomatch), and not one in ours. Code that is
+# never executed cannot be exploited, but it does have to be read past in
+# every report, month after month.
+#
+# Deleting it settles that permanently, instead of waiting for the next Node
+# release to bundle a newer npm and start the next round.
+RUN cd server && npm ci --omit=dev \
+ && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
+ && ! command -v npm
 
 # Copied one by one instead of `COPY server ./server`. Two reasons: the
 # wholesale copy writes package.json back over the tree npm ci just built, and

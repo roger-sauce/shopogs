@@ -13,6 +13,22 @@
     "express": "^4.21.2",
     "playwright-core": "1.51.0"
   },
+  "//overrides": [
+    "Forces versions onto packages that bring their own copy along.",
+    "adm-zip: ours is already 0.6, but camoufox-js and",
+    "generative-bayesian-network each install a 0.5.18 of their own beneath",
+    "themselves (CVE-2026-39244, DoS via a crafted ZIP). The override is the",
+    "only lever that reaches a nested dependency.",
+    "browserslist: CVE-2026-73088/73089, prototype pollution and unbounded",
+    "memory growth. brace-expansion: CVE-2026-14257/69152, both DoS.",
+    "Whenever one of these disappears from the Trivy report on its own",
+    "because the parent package has caught up, the entry here can go."
+  ],
+  "overrides": {
+    "adm-zip": "^0.6.0",
+    "browserslist": "^4.28.7",
+    "brace-expansion": "^5.0.8"
+  },
   "allowScripts": {
     "better-sqlite3@12.11.1": true
   }

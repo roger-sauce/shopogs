@@ -64,5 +64,30 @@ RUN chmod -R 755 /opt/camoufox
 # test as a clear new error.
 COPY --chown=pwuser:pwuser src ./src
 
+# Housekeeping, and the only place in this file that needs root again.
+#
+# libssl3: a fix exists for CVE-2026-45447 (use-after-free in PKCS7_verify),
+# 3.0.2-0ubuntu1.23 -> .25. The base image is only rebuilt when Microsoft
+# feels like it, so we fetch it ourselves.
+#
+# npm: needed for the `npm ci` above, called by nothing at runtime (see CMD).
+# Ten of this image's nineteen findings sat in its bundled dependencies,
+# including the one CRITICAL. Both known layouts are listed -- Debian-based
+# images put it under /usr/lib, Alpine under /usr/local/lib -- and the check
+# at the end fails the build should Microsoft ever move it somewhere else,
+# rather than leaving us with a silently useless line.
+#
+# Unlike in server/Dockerfile this cannot happen in the same layer as the
+# install, because that one runs as pwuser. The bytes therefore stay in the
+# image; what goes away is the executable code and with it the finding.
+USER root
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends libssl3 \
+ && rm -rf /var/lib/apt/lists/* \
+ && rm -rf /usr/lib/node_modules/npm /usr/local/lib/node_modules/npm \
+           /usr/bin/npm /usr/bin/npx /usr/local/bin/npm /usr/local/bin/npx \
+ && ! command -v npm
+USER pwuser
+
 EXPOSE 3001
 CMD ["node", "src/server.js"]
