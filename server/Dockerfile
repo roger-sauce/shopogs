@@ -32,9 +32,16 @@ COPY server/package*.json ./server/
 #
 # Deleting it settles that permanently, instead of waiting for the next Node
 # release to bundle a newer npm and start the next round.
+#
+# The check asks the filesystem, not the shell. `! command -v npm` was the
+# obvious way to write it and the wrong one: npm ran in this very shell a
+# moment ago, so its path sits in the shell's hash table and command -v
+# answers from there -- it reported the binary as present long after the rm
+# had removed it, and failed the build.
 RUN cd server && npm ci --omit=dev \
  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
- && ! command -v npm
+ && test ! -e /usr/local/bin/npm \
+ && test ! -d /usr/local/lib/node_modules/npm
 
 # Copied one by one instead of `COPY server ./server`. Two reasons: the
 # wholesale copy writes package.json back over the tree npm ci just built, and

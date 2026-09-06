@@ -86,7 +86,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && rm -rf /usr/lib/node_modules/npm /usr/local/lib/node_modules/npm \
            /usr/bin/npm /usr/bin/npx /usr/local/bin/npm /usr/local/bin/npx \
- && ! command -v npm
+ && { ! command -v npm || { echo "npm sitzt woanders:"; command -v npm; exit 1; }; }
 USER pwuser
 
 EXPOSE 3001
