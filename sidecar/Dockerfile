@@ -49,6 +49,27 @@ COPY --chown=pwuser:pwuser package*.json ./
 # config". Until now package-lock.json was missing entirely from this folder.
 RUN npm ci --omit=dev
 
+# npm is needed to install and never again: this container starts
+# `node src/server.js`, and install-camoufox.js below runs under node too.
+#
+# Ten of this image's nineteen findings (Trivy, 06.09.2026) sit under npm's own
+# bundled dependencies -- tar among them, the one CRITICAL -- and not one of
+# them is ours. Deleting the package is the fix that holds.
+#
+# Briefly as root, because npm belongs to root while everything here builds as
+# pwuser. The paths are asked for rather than written down: this image is
+# Ubuntu with Node from a distribution package, and it does not have to put npm
+# where the Alpine images do. `rm -f` on the shims so a missing one is silence
+# and not a failed build.
+USER root
+RUN npm_dir="$(npm root -g)" \
+ && rm -rf "$npm_dir/npm" "$npm_dir/npx" \
+ && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/bin/npm /usr/bin/npx \
+ && test ! -e "$npm_dir/npm" \
+ && test ! -e /usr/local/bin/npm \
+ && test ! -e /usr/bin/npm
+USER pwuser
+
 COPY --chown=pwuser:pwuser scripts/install-camoufox.js ./scripts/install-camoufox.js
 RUN node scripts/install-camoufox.js
 # camoufox-js' own installer does a `chmod -R 755` after unpacking
