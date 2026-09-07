@@ -33,6 +33,41 @@ gewünscht am 16.08.2026, nachdem mehrzeilige Nachrichten überhandnahmen.
 
 Branch ist **`main`**.
 
+Über jedem Befehlsblock steht, in **welchem Projekt und auf welcher Maschine**
+er läuft. Am 07.09.2026 landete ein Commit im falschen Repository, weil im
+Block nur „im Projekt" stand — zwei Arbeitskopien und zwei Rechner sind
+gleichzeitig offen.
+
+## Erst testen, dann committen (Roger, 07.09.2026)
+
+**Alles, was vor dem Push geprüft werden kann, wird vor dem Push geprüft.
+Commit und Push kommen danach.**
+
+Der Anlass lag in konzert-guide: eine SwiftUI-Änderung wurde eingecheckt und
+scheiterte erst danach am Build. In der Historie stehen seither zwei Commits,
+wo einer gereicht hätte — der Fehler und seine Reparatur, beide dauerhaft.
+
+Erzwungen ist die umgekehrte Reihenfolge nur dort, wo git das Ausrollen *ist*.
+Was auf extern erst nach einem Rebuild läuft, kann vorher dort nicht geprüft
+werden. Das ist die Ausnahme und keine Entschuldigung dafür, die Prüfungen
+wegzulassen, die vorher laufen können.
+
+| Änderung | vor dem Commit | nach dem Ausrollen |
+|---|---|---|
+| `src/` (Web-App, Shop-Adapter) | `npm run build` (enthält `tsc --noEmit`), `npm run lint` | Rebuild auf extern, eine Suche je betroffenem Shop |
+| `server/` | `npm run lint`, der Server lokal gegen `/api/` | Rebuild auf extern |
+| `sidecar/` | — lokal kaum prüfbar | Rebuild, dann je **eine Suche bei HHV und bei Boomkat** |
+| `ios/WaxStock/` | Build **und** Lauf in Xcode — keine Ausnahme | — |
+| Dockerfile | `docker build` auf dem Mac fängt die Syntax | Bau und Prüfungen auf extern |
+
+Und dieselbe Gewohnheit eine Stufe kleiner: **nach jedem Schritt den Zustand
+ansehen, bevor der nächste kommt.** `git --no-optional-locks status --short`
+vor jedem Commit, und auf der Zielmaschine ein `grep` nach der geänderten
+Zeile nach jedem Pull. Am 07.09.2026 fehlte eine neue Datei im Commit
+(`git commit -a` nimmt keine neuen Dateien mit) und ein Dockerfile im Push;
+beide Male wurde weitergebaut, und beide Male kostete es einen Umweg, den ein
+Blick erspart hätte.
+
 ## Sprache
 
 | | |
