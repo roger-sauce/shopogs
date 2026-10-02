@@ -1,29 +1,42 @@
 import { proxyBase } from "../../../lib/proxyBase";
 
-// Boomkat (boomkat.com) — Spree Commerce (Rails), server-rendered HTML.
-// Verified by live recon (the format has changed since the old recon -- the
-// autocomplete API no longer returns separate artist hits, only release hits
-// directly, with artist(s) + product link):
-//   1) GET /api/autocomplete?query=<term> — release hits:
-//      { type: "Release", value: <title>, url: "/products/<slug>",
-//        artists: string[], ... } (JSON, without stock info).
-//   2) GET /products/<slug> — product page, contains a
-//      <script type="application/ld+json"> with all formats in one go
-//      (name/price/currency/availability per format as a schema.org offer)
-//      -- no separate in-stock/out-of-stock query param needed any more as
-//      in the old recon, a single page request is enough.
+// Boomkat (boomkat.com) — Rails with Turbo/Hotwire, server-rendered HTML.
 //
-// Runs through the browser sidecar (see sidecar/src/browserSession.js), no
-// longer through a simple reverse proxy -- that one was reliably blocked with
-// HTTP 403 (presumably TLS/bot fingerprinting that a plain Node reverse proxy
-// cannot imitate; Camoufox patches Firefox for exactly that). Every search
-// sets up its own session there, which is closed again after the search via
-// closeBoomkatSession() -- same pattern as with HHV.
+// Rebuilt by the shop in October 2026. What that relaunch moved, verified
+// live against the running site:
+//
+//   1) The search. GET /api/autocomplete is gone (plain 404, Rails' own
+//      error page). The replacement is
+//        GET /api/search/keywords?q=<term>
+//      and it answers with an HTML fragment, not with JSON: one
+//      <li role="option"> per hit, each with a link, a thumbnail and an
+//      <h3> holding "Artist - Title". Artists, releases and a trailing
+//      link to the full search share the list; the release rows are the
+//      ones whose href points into /releases/.
+//
+//      One trap worth recording: sending `Accept: application/json` on its
+//      own makes this endpoint answer HTTP 500. Anything that mentions
+//      text/html is fine, including the "text/html, application/json" the
+//      sidecar sends.
+//
+//   2) The product pages. /products/<slug> became
+//        /artists/<artist>/releases/<id>/<title>
+//      -- which is why counting "/products/" links now counts nothing at
+//      all. The structured data survived the move but sits one level
+//      deeper, see transform.ts.
+//
+// Runs through the browser sidecar (see sidecar/src/browserSession.js), not
+// through a plain reverse proxy -- that one was reliably answered with HTTP
+// 403 (TLS/bot fingerprinting a Node proxy cannot imitate; Camoufox patches
+// Firefox for exactly that). The keyword path has to be listed in that
+// file's ajaxPathPrefixes: a path missing there is fetched by full
+// navigation, and a full document navigation to an API path is what earns a
+// Cloudflare challenge page instead of an answer.
 const PROXY_BASE = proxyBase("boomkat");
 
 // Converts an artist name into the URL slug of the artist overview page
 // (e.g. "Sees" -> "sees"). The pattern for multi-word names is not verified
-// 100% -- if the slug does not exist, the fallback to the autocomplete search
+// 100% -- if the slug does not exist, the fallback to the keyword search
 // in index.ts kicks in.
 export function slugifyArtist(artist: string): string {
   // NFD decomposes e.g. "é" into "e" + an accent character -- after that a
@@ -41,30 +54,25 @@ export function slugifyArtist(artist: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-export interface BoomkatAutocompleteEntry {
-  type: string;
-  value: string;
-  url: string;
-  artists: string[];
-}
-
-export async function autocompleteBoomkat(query: string): Promise<BoomkatAutocompleteEntry[]> {
-  const url = `${PROXY_BASE}/api/autocomplete?query=${encodeURIComponent(query)}`;
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) throw new Error(`Boomkat autocomplete: HTTP ${res.status}`);
-  return res.json();
-}
-
-export async function fetchBoomkatProductPage(productUrlPath: string): Promise<string> {
-  const path = productUrlPath.startsWith("/") ? productUrlPath : `/${productUrlPath}`;
-  const res = await fetch(`${PROXY_BASE}${path}`, { headers: { Accept: "text/html" } });
-  if (!res.ok) throw new Error(`Boomkat product page: HTTP ${res.status}`);
+// The keyword search. Returns raw HTML -- the parsing lives in transform.ts,
+// like every other markup this adapter reads.
+export async function searchBoomkatKeywords(query: string): Promise<string> {
+  const url = `${PROXY_BASE}/api/search/keywords?q=${encodeURIComponent(query)}`;
+  const res = await fetch(url, { headers: { Accept: "text/html" } });
+  if (!res.ok) throw new Error(`Boomkat keyword search: HTTP ${res.status}`);
   return res.text();
 }
 
-// Artist overview page -- lists (unlike the autocomplete API) all releases of
-// an artist in full, which matters for short/generic artist names in an
-// artist-only search (see index.ts).
+export async function fetchBoomkatReleasePage(releasePath: string): Promise<string> {
+  const path = releasePath.startsWith("/") ? releasePath : `/${releasePath}`;
+  const res = await fetch(`${PROXY_BASE}${path}`, { headers: { Accept: "text/html" } });
+  if (!res.ok) throw new Error(`Boomkat release page: HTTP ${res.status}`);
+  return res.text();
+}
+
+// Artist overview page -- lists (unlike the keyword search, which answers
+// with five rows) all releases of an artist in full, which matters for
+// short/generic artist names and for artist-only searches.
 export async function fetchBoomkatArtistPage(slug: string): Promise<string> {
   const res = await fetch(`${PROXY_BASE}/artists/${slug}`, { headers: { Accept: "text/html" } });
   if (!res.ok) throw new Error(`Boomkat artist page: HTTP ${res.status}`);

@@ -1,7 +1,7 @@
 import type { ShopAdapter, AvailabilityResult, LabelSearchResult } from "../../../types/shop";
 import {
-  autocompleteBoomkat,
-  fetchBoomkatProductPage,
+  searchBoomkatKeywords,
+  fetchBoomkatReleasePage,
   fetchBoomkatArtistPage,
   fetchBoomkatLabelPage,
   slugifyArtist,
@@ -9,16 +9,12 @@ import {
 } from "./api";
 import {
   transformBoomkatProductPage,
+  parseBoomkatKeywordResults,
   parseBoomkatArtistPage,
   countBoomkatLabelProducts,
+  type BoomkatReleaseEntry,
 } from "./transform";
 import { matchesQueryWords } from "../../../lib/relevance";
-
-interface ReleaseMatch {
-  artist: string;
-  title: string;
-  url: string;
-}
 
 const boomkat: ShopAdapter = {
   id: "boomkat",
@@ -41,55 +37,50 @@ const boomkat: ShopAdapter = {
       const titleNeedle = title.trim();
       if (!artistNeedle && !titleNeedle) return [];
 
-      let releaseMatches: ReleaseMatch[] = [];
+      const query = [artistNeedle, titleNeedle].filter(Boolean).join(" ");
+      let releaseMatches: BoomkatReleaseEntry[] = [];
 
-      // Pure artist search (no title): the autocomplete API only returns a
-      // limited, ranked "best guess" list (~10 hits) and can miss an
-      // existing release for short/generic names (observed live: "Sees" was
-      // found via the title search "Ampersand Curve", but not via a pure
-      // artist search for "Sees"). The artist overview page
-      // /artists/<slug> on the other hand lists all of the artist's
-      // releases in full -- try it as the primary source for artist-only
-      // searches, with a fallback to autocomplete if the slug does not
-      // exist or returns nothing.
-      if (!titleNeedle && artistNeedle) {
+      // With an artist to go on, the artist overview page is the better
+      // source and it is tried first -- for both kinds of search, not just
+      // the artist-only one as before.
+      //
+      // The keyword search answers with five rows, ranked by its own idea of
+      // relevance, and a record that is in the shop can simply fall off that
+      // list (observed: "Sees" was found through the title but not through
+      // the artist name). /artists/<slug> lists the catalogue in full and
+      // costs exactly one request either way.
+      if (artistNeedle) {
         try {
-          const slug = slugifyArtist(artistNeedle);
-          const html = await fetchBoomkatArtistPage(slug);
-          const entries = parseBoomkatArtistPage(html);
-          releaseMatches = entries.filter((e) => matchesQueryWords(e.artist, artistNeedle));
+          const html = await fetchBoomkatArtistPage(slugifyArtist(artistNeedle));
+          releaseMatches = parseBoomkatArtistPage(html).filter((entry) =>
+            matchesQueryWords(`${entry.artist} ${entry.title}`, query)
+          );
         } catch (err) {
-          console.warn(`[boomkat] Artist-Seite fehlgeschlagen, Fallback auf Autocomplete:`, err);
+          console.warn(`[boomkat] Artist-Seite fehlgeschlagen, Fallback auf Stichwortsuche:`, err);
         }
       }
 
+      // No artist, an unknown slug, or nothing on the page that matches the
+      // title: ask the search. It returns artists, releases and a link to
+      // the full search page all mixed together; the parser keeps the
+      // releases.
       if (releaseMatches.length === 0) {
-        const query = [artist, title].filter(Boolean).join(" ").trim();
-        const suggestions = await autocompleteBoomkat(query);
-
-        // Live Recon (as of now) shows: autocomplete only returns release
-        // hits directly (no separate "Artist" hit type any more, as
-        // documented in the old Recon) -- every hit already comes with
-        // title, artist(s) and a direct product link.
-        // Word-boundary filter against artist+title, the same pattern as
-        // with the other shops.
-        releaseMatches = suggestions
-          .filter(
-            (s) => s.type === "Release" && matchesQueryWords(`${s.artists.join(" ")} ${s.value}`, query)
-          )
-          .map((s) => ({ artist: s.artists.join(", "), title: s.value, url: s.url }));
+        const hits = parseBoomkatKeywordResults(await searchBoomkatKeywords(query));
+        releaseMatches = hits.filter((hit) =>
+          matchesQueryWords(`${hit.artist} ${hit.title}`, query)
+        );
       }
 
       const results = await Promise.all(
         releaseMatches.map(async (match) => {
           try {
-            const html = await fetchBoomkatProductPage(match.url);
-            const productUrl = match.url.startsWith("http")
+            const html = await fetchBoomkatReleasePage(match.url);
+            const releaseUrl = match.url.startsWith("http")
               ? match.url
               : `https://boomkat.com${match.url}`;
-            return transformBoomkatProductPage(html, match.artist, match.title, productUrl);
+            return transformBoomkatProductPage(html, match.artist, match.title, releaseUrl);
           } catch (err) {
-            console.warn(`[boomkat] Produktseite ${match.url} fehlgeschlagen:`, err);
+            console.warn(`[boomkat] Release-Seite ${match.url} fehlgeschlagen:`, err);
             return [];
           }
         })

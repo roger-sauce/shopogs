@@ -147,3 +147,65 @@ Ausgangslage: HHV verlangt seit dem Docker-Testing (2026-07-11) einen gültigen 
 - HHV: Facet-Hash-Encoding (`D2N2S11` etc.) ggf. weiter reverse-engineeren, falls Format-Filter direkt in der URL statt clientseitig gebraucht wird.
 - Rate-Limiting / robots.txt / ToS pro Shop noch nicht geprüft — vor Produktivbetrieb sinnvoll gegenzuchecken.
 - Alte, unregistrierte Ordner `src/shops/scraping/boomkat/` (wird beim Wiederaufbau vermutlich überschrieben) und `src/shops/scraping/soufflecontinu/` (Dead Code, durch `unofficial-api/soufflecontinu/` ersetzt) liegen noch auf der Platte — aus der Sandbox nicht löschbar (Permission-Fehler), können vom User bei Gelegenheit selbst entfernt werden.
+
+---
+
+## Nachtrag 2026-10-02: Boomkat-Relaunch
+
+Boomkat hat die Seite neu gebaut (Rails mit Turbo/Hotwire, Tailwind statt
+semantischer Klassen). Der Adapter lief danach ins Leere — ohne Fehler, ohne
+Meldung, einfach null Treffer. Verifiziert live gegen die laufende Seite, teils
+über den Sidecar, teils über Chrome.
+
+**Was sich geändert hat:**
+
+| vorher | jetzt |
+|---|---|
+| `GET /api/autocomplete?query=` → JSON | `GET /api/search/keywords?q=` → HTML-Fragment |
+| `/products/<slug>` | `/artists/<artist>/releases/<id>/<titel>` |
+| `ld+json` mit `offers` auf oberster Ebene | `@graph` → `ProductGroup` → `hasVariant[]` → `Product.offers` |
+| `li.product_item`, `.release__artist`, `.release__title` | Tailwind-Utilities, keine semantischen Anker mehr |
+
+**Der Suchendpunkt** antwortet mit `<li role="option">`-Zeilen: Künstler,
+Releases und als letzte Zeile ein Link auf die Volltextsuche, gemischt. Jede
+Zeile trägt Vorschaubild, Link und ein `<h3>` mit `"Artist - Titel"`. Fünf
+Treffer pro Abfrage.
+
+Falle: `Accept: application/json` **allein** lässt den Endpunkt mit **HTTP 500**
+antworten. Alles, was `text/html` erwähnt, liefert 200 — auch das
+`"text/html, application/json"`, das der Sidecar schickt.
+
+**Strukturierte Daten** sind reicher als vorher: `additionalProperty
+{name:"Format", value:"2LP (Black Vinyl)"}` als eigenes Feld, dazu `category`
+(`"Physical music"` / `"Digital music download"`). `availability` ist unverändert
+schema.org (`InStock`, `PreOrder`, `LimitedAvailability`, `OutOfStock`), die
+Statuszuordnung blieb also wie sie war.
+
+Verloren: die Download-Unterformate. Früher kamen `MP3`, `FLAC`, `WAV` als eigene
+Treffer, jetzt gibt es ein Produkt `"Download"` mit mehreren namenlosen Offers
+(bei *Untrue* £6.99 und £7.99). Der Adapter nimmt pro Format das günstigste
+bestellbare Angebot und meldet eine Zeile — vom User ausdrücklich so gewünscht.
+
+**Cloudflare-Stolperstein im Sidecar.** Der erste Versuch über
+`/proxy/boomkat/api/search/keywords` brachte eine „Just a moment…"-Seite. Ursache
+war nicht Boomkat, sondern `ajaxPathPrefixes` in `sidecar/src/browserSession.js`:
+dort stand noch `/api/autocomplete`. Ein Pfad, der in dieser Liste fehlt, wird per
+**Volldokument-Navigation** geholt — und genau die beantwortet Cloudflare mit der
+Challenge. Als `fetch()` aus der laufenden Seite heraus geht derselbe Pfad
+anstandslos durch.
+
+**Neue Anker im Parser:** nicht mehr CSS-Klassen, sondern der Pfadbestandteil
+`/releases/` im `href`. Den kann der Shop nicht umbenennen, ohne seine eigenen
+Links zu brechen. Künstlername kommt aus dem Nachbarlink `a[href^="/artists/"]`
+ohne `/releases/` in derselben Kachel.
+
+Dabei eine Falle, die zuerst zuschlug: Kacheln verlinken ihr Release zweimal
+(Cover und Titel), unterschieden durch Text — der Bildlink hat keinen. Die
+Suchantwort dagegen packt das Vorschaubild **in denselben** Link wie den Titel.
+Ein Filter auf „enthält kein `<img>`" warf deshalb jeden Suchtreffer weg.
+Richtig ist allein die Prüfung auf Text.
+
+**Gegen echtes Markup geprüft:** Suche 3/3 (`burial untrue`, `homogenic bjork`,
+`sees ampersand curve` — letzteres genau der Fall, an dem die alte Autocomplete
+scheiterte), Künstlerseite 21 Releases mit Künstler und Titel, Labelseite 50,
+Produktseiten mit Format, Preis, Währung und Status.

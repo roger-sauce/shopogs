@@ -17,7 +17,7 @@
 //   - fetchViaBrowser: fetch() INSIDE the page. For endpoints that the real
 //     page itself also loads via AJAX/XHR (e.g. HHV's
 //     /lazy/artikel/.../list_entry turbo frames, Boomkat's
-//     /api/autocomplete). Runs over the real browser connection (TLS
+//     /api/search/keywords). Runs over the real browser connection (TLS
 //     fingerprint, cookies, referer) -- with Boomkat that is presumably the
 //     decisive difference from the old approach proxied directly in
 //     nginx/vite, which was blocked there with HTTP 403 (TLS/bot
@@ -27,7 +27,7 @@
 // cookie banner away) BEFORE any request runs -- with HHV that changes
 // nothing (the search page navigates for real right afterwards anyway), with
 // Boomkat it is a precondition: there the very first request of a search is
-// the autocomplete AJAX API, and a fetch() from a still empty about:blank
+// the keyword search AJAX API, and a fetch() from a still empty about:blank
 // page would be the wrong origin / no same-site cookies.
 const SHOP_CONFIG = {
   hhv: {
@@ -41,9 +41,16 @@ const SHOP_CONFIG = {
     origin: "https://boomkat.com",
     locale: "en-GB",
     acceptButtonPattern: /accept|agree|got it/i,
-    // Autocomplete search -- the real page calls this via AJAX too,
-    // while you type into the search box.
-    ajaxPathPrefixes: ["/api/autocomplete"],
+    // Keyword search -- the real page calls this via AJAX too, while you
+    // type into the search box.
+    //
+    // Until the relaunch of October 2026 this was /api/autocomplete. The
+    // rename cost an afternoon, because the symptom pointed the wrong way:
+    // a path that is NOT listed here is fetched by full navigation, and a
+    // full document navigation to an API path is exactly what Cloudflare
+    // answers with its "Just a moment..." challenge. It looked like Boomkat
+    // had locked us out; in truth we were knocking on the wrong kind of door.
+    ajaxPathPrefixes: ["/api/search/keywords"],
   },
 };
 
@@ -127,7 +134,7 @@ async function gotoTolerant(page, url, beschreibung) {
       return "timeout";
     }
     // NS_BINDING_ABORTED: the navigation was aborted. With Boomkat this is
-    // the case when the autocomplete interface returns a product link to a
+    // the case when the keyword search returns a release link to a
     // page that does not exist -- it does that for records that are not
     // stocked there at all. That is not an error, simply no hit, and it
     // does not belong in the log as a stack trace.
