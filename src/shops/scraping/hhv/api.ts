@@ -1,4 +1,5 @@
 import { proxyBase } from "../../../lib/proxyBase";
+import { sidecarHeaders } from "../../../lib/searchId";
 
 // HHV (hhv.de) — custom backend (Turbo/Hotwire). The catalogue search page
 // loads every result as an individual lazy-loaded Turbo-Frame (but the
@@ -23,20 +24,20 @@ const MAX_ARTICLES = 20; // Cap, so we do not fire off too many single requests
 // search URL is maintained in exactly one place.
 export const HHV_SEARCH_FACET = DEFAULT_FACET;
 
-export async function searchHhvArticleIds(query: string): Promise<string[]> {
+export async function searchHhvArticleIds(query: string, searchId: string): Promise<string[]> {
   const url = `${PROXY_BASE}/records/katalog/filter/suche-${DEFAULT_FACET}?term=${encodeURIComponent(
     query
   )}`;
-  const res = await fetch(url, { headers: { Accept: "text/html" } });
+  const res = await fetch(url, { headers: sidecarHeaders(searchId) });
   if (!res.ok) throw new Error(`HHV search: HTTP ${res.status}`);
   const html = await res.text();
   const ids = Array.from(html.matchAll(/\/lazy\/artikel\/(\d+)\/list_entry/g)).map((m) => m[1]);
   return [...new Set(ids)].slice(0, MAX_ARTICLES);
 }
 
-export async function fetchHhvListEntry(articleId: string): Promise<string> {
+export async function fetchHhvListEntry(articleId: string, searchId: string): Promise<string> {
   const res = await fetch(`${PROXY_BASE}/lazy/artikel/${articleId}/list_entry`, {
-    headers: { Accept: "text/html" },
+    headers: sidecarHeaders(searchId),
   });
   if (!res.ok) throw new Error(`HHV list_entry ${articleId}: HTTP ${res.status}`);
   return res.text();
@@ -47,20 +48,20 @@ export async function fetchHhvListEntry(articleId: string): Promise<string> {
 // artist/title search) we do not care about the individual article IDs but
 // about a possibly present label filter link with data-title/data-path (see
 // transform.ts).
-export async function fetchHhvSearchPage(term: string): Promise<string> {
+export async function fetchHhvSearchPage(term: string, searchId: string): Promise<string> {
   const url = `${PROXY_BASE}/records/katalog/filter/suche-${DEFAULT_FACET}?term=${encodeURIComponent(
     term
   )}`;
-  const res = await fetch(url, { headers: { Accept: "text/html" } });
+  const res = await fetch(url, { headers: sidecarHeaders(searchId) });
   if (!res.ok) throw new Error(`HHV search page: HTTP ${res.status}`);
   return res.text();
 }
 
 // Loads any relative path URL already supplied by HHV (e.g. a data-path value
 // from the search page) through the same proxy/sidecar.
-export async function fetchHhvPath(path: string): Promise<string> {
+export async function fetchHhvPath(path: string, searchId: string): Promise<string> {
   const p = path.startsWith("/") ? path : `/${path}`;
-  const res = await fetch(`${PROXY_BASE}${p}`, { headers: { Accept: "text/html" } });
+  const res = await fetch(`${PROXY_BASE}${p}`, { headers: sidecarHeaders(searchId) });
   if (!res.ok) throw new Error(`HHV path ${path}: HTTP ${res.status}`);
   return res.text();
 }
@@ -71,9 +72,9 @@ export async function fetchHhvPath(path: string): Promise<string> {
 // finally block, including on errors. Deliberately robust: a failed close
 // call must not bring down the actual search, and if need be the sidecar
 // cleans up by itself via the idle timeout.
-export async function closeHhvSession(): Promise<void> {
+export async function closeHhvSession(searchId: string): Promise<void> {
   try {
-    await fetch(`${PROXY_BASE}/__session/close`, { method: "POST" });
+    await fetch(`${PROXY_BASE}/__session/close`, { method: "POST", headers: sidecarHeaders(searchId) });
   } catch (err) {
     console.warn("[hhv] Session-Close fehlgeschlagen:", err);
   }

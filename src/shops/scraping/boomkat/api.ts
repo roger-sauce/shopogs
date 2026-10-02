@@ -1,4 +1,5 @@
 import { proxyBase } from "../../../lib/proxyBase";
+import { sidecarHeaders } from "../../../lib/searchId";
 
 // Boomkat (boomkat.com) — Rails with Turbo/Hotwire, server-rendered HTML.
 //
@@ -56,16 +57,16 @@ export function slugifyArtist(artist: string): string {
 
 // The keyword search. Returns raw HTML -- the parsing lives in transform.ts,
 // like every other markup this adapter reads.
-export async function searchBoomkatKeywords(query: string): Promise<string> {
+export async function searchBoomkatKeywords(query: string, searchId: string): Promise<string> {
   const url = `${PROXY_BASE}/api/search/keywords?q=${encodeURIComponent(query)}`;
-  const res = await fetch(url, { headers: { Accept: "text/html" } });
+  const res = await fetch(url, { headers: sidecarHeaders(searchId) });
   if (!res.ok) throw new Error(`Boomkat keyword search: HTTP ${res.status}`);
   return res.text();
 }
 
-export async function fetchBoomkatReleasePage(releasePath: string): Promise<string> {
+export async function fetchBoomkatReleasePage(releasePath: string, searchId: string): Promise<string> {
   const path = releasePath.startsWith("/") ? releasePath : `/${releasePath}`;
-  const res = await fetch(`${PROXY_BASE}${path}`, { headers: { Accept: "text/html" } });
+  const res = await fetch(`${PROXY_BASE}${path}`, { headers: sidecarHeaders(searchId) });
   if (!res.ok) throw new Error(`Boomkat release page: HTTP ${res.status}`);
   return res.text();
 }
@@ -73,8 +74,8 @@ export async function fetchBoomkatReleasePage(releasePath: string): Promise<stri
 // Artist overview page -- lists (unlike the keyword search, which answers
 // with five rows) all releases of an artist in full, which matters for
 // short/generic artist names and for artist-only searches.
-export async function fetchBoomkatArtistPage(slug: string): Promise<string> {
-  const res = await fetch(`${PROXY_BASE}/artists/${slug}`, { headers: { Accept: "text/html" } });
+export async function fetchBoomkatArtistPage(slug: string, searchId: string): Promise<string> {
+  const res = await fetch(`${PROXY_BASE}/artists/${slug}`, { headers: sidecarHeaders(searchId) });
   if (!res.ok) throw new Error(`Boomkat artist page: HTTP ${res.status}`);
   return res.text();
 }
@@ -83,9 +84,9 @@ export async function fetchBoomkatArtistPage(slug: string): Promise<string> {
 // -- same grid markup as the artist overview page, but under /labels/<slug>.
 // per_page=100 verified by recon, so that even medium-sized label catalogues
 // fit on a single page.
-export async function fetchBoomkatLabelPage(slug: string): Promise<string> {
+export async function fetchBoomkatLabelPage(slug: string, searchId: string): Promise<string> {
   const res = await fetch(`${PROXY_BASE}/labels/${slug}?per_page=100`, {
-    headers: { Accept: "text/html" },
+    headers: sidecarHeaders(searchId),
   });
   if (!res.ok) throw new Error(`Boomkat label page: HTTP ${res.status}`);
   return res.text();
@@ -95,9 +96,9 @@ export async function fetchBoomkatLabelPage(slug: string): Promise<string> {
 // session immediately instead of waiting for the idle timeout (see
 // sidecar/src/browserSession.js). Always called by checkAvailability() from a
 // finally block, including on errors.
-export async function closeBoomkatSession(): Promise<void> {
+export async function closeBoomkatSession(searchId: string): Promise<void> {
   try {
-    await fetch(`${PROXY_BASE}/__session/close`, { method: "POST" });
+    await fetch(`${PROXY_BASE}/__session/close`, { method: "POST", headers: sidecarHeaders(searchId) });
   } catch (err) {
     console.warn("[boomkat] Session-Close fehlgeschlagen:", err);
   }

@@ -15,6 +15,7 @@ import {
   type BoomkatReleaseEntry,
 } from "./transform";
 import { matchesQueryWords } from "../../../lib/relevance";
+import { newSearchId } from "../../../lib/searchId";
 
 const boomkat: ShopAdapter = {
   id: "boomkat",
@@ -28,10 +29,15 @@ const boomkat: ShopAdapter = {
   // navigation instead of a direct reverse proxy) -- see api.ts.
   speed: "slow",
   async checkAvailability(artist, title) {
-    // Every search sets up its own Camoufox session in the sidecar (see
-    // browserSession.js) -- no matter whether the search succeeded or
-    // aborted with an error, that session has to be closed afterwards,
-    // otherwise the browser process stays open until the idle timeout.
+    // One id per search, carried on every request to the sidecar: it gives
+    // this search a browser context of its own, so a search running at the
+    // same time cannot be disturbed by it -- and cannot be torn down by the
+    // close below. See src/lib/searchId.ts.
+    const searchId = newSearchId();
+
+    // No matter whether the search succeeded or aborted with an error, that
+    // context has to be closed afterwards, otherwise it lingers until its
+    // own timeout.
     try {
       const artistNeedle = artist.trim();
       const titleNeedle = title.trim();
@@ -55,7 +61,7 @@ const boomkat: ShopAdapter = {
       let releaseMatches: BoomkatReleaseEntry[] = [];
 
       try {
-        const hits = parseBoomkatKeywordResults(await searchBoomkatKeywords(query));
+        const hits = parseBoomkatKeywordResults(await searchBoomkatKeywords(query, searchId));
         releaseMatches = hits.filter((hit) =>
           matchesQueryWords(`${hit.artist} ${hit.title}`, query)
         );
@@ -70,7 +76,7 @@ const boomkat: ShopAdapter = {
       // through the title but not through the artist name).
       if (releaseMatches.length === 0 && artistNeedle) {
         try {
-          const html = await fetchBoomkatArtistPage(slugifyArtist(artistNeedle));
+          const html = await fetchBoomkatArtistPage(slugifyArtist(artistNeedle), searchId);
           releaseMatches = parseBoomkatArtistPage(html).filter((entry) =>
             matchesQueryWords(`${entry.artist} ${entry.title}`, query)
           );
@@ -82,7 +88,7 @@ const boomkat: ShopAdapter = {
       const results = await Promise.all(
         releaseMatches.map(async (match) => {
           try {
-            const html = await fetchBoomkatReleasePage(match.url);
+            const html = await fetchBoomkatReleasePage(match.url, searchId);
             const releaseUrl = match.url.startsWith("http")
               ? match.url
               : `https://boomkat.com${match.url}`;
@@ -96,12 +102,17 @@ const boomkat: ShopAdapter = {
 
       return results.flat() as AvailabilityResult[];
     } finally {
-      await closeBoomkatSession();
+      await closeBoomkatSession(searchId);
     }
   },
   async checkLabelAvailability(label): Promise<LabelSearchResult> {
-    // As with checkAvailability: every search sets up its own Camoufox
-    // session in the sidecar, which absolutely has to be closed again
+    // One id per search, carried on every request to the sidecar: it gives
+    // this search a browser context of its own, so a search running at the
+    // same time cannot be disturbed by it -- and cannot be torn down by the
+    // close below. See src/lib/searchId.ts.
+    const searchId = newSearchId();
+
+    // As with checkAvailability: the context has to be closed again
     // afterwards.
     try {
       const needle = label.trim();
@@ -109,11 +120,11 @@ const boomkat: ShopAdapter = {
 
       const slug = slugifyArtist(needle);
       const url = `https://boomkat.com/labels/${slug}`;
-      const html = await fetchBoomkatLabelPage(slug);
+      const html = await fetchBoomkatLabelPage(slug, searchId);
       const count = countBoomkatLabelProducts(html);
       return { supported: true, count, url };
     } finally {
-      await closeBoomkatSession();
+      await closeBoomkatSession(searchId);
     }
   },
 };

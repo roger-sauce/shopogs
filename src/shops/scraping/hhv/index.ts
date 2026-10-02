@@ -9,6 +9,7 @@ import {
 } from "./api";
 import { transformHhvListEntry, findHhvLabelDataPath, extractHhvArticleCount } from "./transform";
 import { matchesQueryWords } from "../../../lib/relevance";
+import { newSearchId } from "../../../lib/searchId";
 
 const hhv: ShopAdapter = {
   id: "hhv",
@@ -20,18 +21,23 @@ const hhv: ShopAdapter = {
   type: "scraping",
   speed: "slow",
   async checkAvailability(artist, title) {
-    // Every search sets up its own Camoufox session in the sidecar (see
-    // browserSession.js) -- no matter whether the search succeeded or
-    // aborted with an error, that session has to be closed afterwards,
-    // otherwise the browser process stays open until the idle timeout.
+    // One id per search, carried on every request to the sidecar: it gives
+    // this search a browser context of its own, so a search running at the
+    // same time cannot be disturbed by it -- and cannot be torn down by the
+    // close below. See src/lib/searchId.ts.
+    const searchId = newSearchId();
+
+    // No matter whether the search succeeded or aborted with an error, that
+    // context has to be closed afterwards, otherwise it lingers until its
+    // own timeout.
     try {
       const query = [artist, title].filter(Boolean).join(" ").trim();
-      const articleIds = await searchHhvArticleIds(query);
+      const articleIds = await searchHhvArticleIds(query, searchId);
 
       const entries = await Promise.all(
         articleIds.map(async (id) => {
           try {
-            const html = await fetchHhvListEntry(id);
+            const html = await fetchHhvListEntry(id, searchId);
             return transformHhvListEntry(html, id);
           } catch (err) {
             console.warn(`[hhv] Artikel ${id} fehlgeschlagen:`, err);
@@ -50,12 +56,17 @@ const hhv: ShopAdapter = {
         .filter((e): e is AvailabilityResult => e !== null)
         .filter((r) => matchesQueryWords(`${r.artist ?? ""} ${r.title}`, query));
     } finally {
-      await closeHhvSession();
+      await closeHhvSession(searchId);
     }
   },
   async checkLabelAvailability(label): Promise<LabelSearchResult> {
-    // As in checkAvailability: every search sets up its own Camoufox
-    // session in the sidecar, which absolutely has to be closed again
+    // One id per search, carried on every request to the sidecar: it gives
+    // this search a browser context of its own, so a search running at the
+    // same time cannot be disturbed by it -- and cannot be torn down by the
+    // close below. See src/lib/searchId.ts.
+    const searchId = newSearchId();
+
+    // As in checkAvailability: the context has to be closed again
     // afterwards.
     try {
       const needle = label.trim();
@@ -64,7 +75,7 @@ const hhv: ShopAdapter = {
       )}`;
       if (!needle) return { supported: true, count: 0, url: "https://www.hhv.de" };
 
-      const html = await fetchHhvSearchPage(needle);
+      const html = await fetchHhvSearchPage(needle, searchId);
       const dataPath = findHhvLabelDataPath(html, needle);
 
       if (!dataPath) {
@@ -78,11 +89,11 @@ const hhv: ShopAdapter = {
       const pathUrl = dataPath.startsWith("http")
         ? dataPath
         : `https://www.hhv.de${dataPath.startsWith("/") ? "" : "/"}${dataPath}`;
-      const pathHtml = await fetchHhvPath(dataPath);
+      const pathHtml = await fetchHhvPath(dataPath, searchId);
       const count = extractHhvArticleCount(pathHtml);
       return { supported: true, count, url: pathUrl };
     } finally {
-      await closeHhvSession();
+      await closeHhvSession(searchId);
     }
   },
 };

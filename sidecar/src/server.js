@@ -4,34 +4,53 @@
 // routes /proxy/<shop>/* here instead of directly to the real shop.
 //
 // Sequence per request:
-//   1) Depending on the path either navigateAndGetHtml (real full
+//   1) The X-Search-Id header says which search is asking. Every search gets
+//      a browser context of its own, so two searches running at the same
+//      time cannot disturb each other -- and the one that finishes first
+//      cannot close the other one's browser. That used to happen and showed
+//      up as HTTP 502 with "Target page, context or browser has been
+//      closed".
+//   2) Depending on the path either navigateAndGetHtml (real full
 //      navigation -- for pages whose bot protection is only resolved on a
 //      real navigation) or fetchViaBrowser (fetch() from inside the page --
-//      for AJAX endpoints that the real page loads that way too). The
-//      session is rebuilt if needed.
-//   2) If the response looks like a block/challenge (HTTP status, or for
-//      HTML pages an unusually small body), invalidate the session and
-//      retry ONCE (with a fresh session).
+//      for AJAX endpoints that the real page loads that way too).
+//   3) A response that looks like a block or a challenge is logged and
+//      passed through as it is. It is deliberately NOT retried: asking the
+//      same question again a second later has never yet turned a 403 into an
+//      answer, it only doubles the load on a shop that is already throttling
+//      us -- and a fresh context cannot help either, since every search
+//      already starts with one.
 //
-// Lifecycle: after every completed search the frontend calls
-// POST /proxy/<shop>/__session/close (see hhv/boomkat api.ts) so that the
-// browser process disappears again immediately instead of staying open
-// until the idle timeout -- with few parallel searches continuous operation
-// is not worth it.
+// Lifecycle: after every completed search the adapter calls
+// POST /proxy/<shop>/__session/close with the same header, which closes that
+// one context. The browser stays up for the next search and shuts itself
+// down after 30 minutes without a request.
 const express = require("express");
-const { navigateAndGetHtml, fetchViaBrowser, invalidateSession, isAjaxPath } = require("./browserSession");
+const { navigateAndGetHtml, fetchViaBrowser, closeSearch, isAjaxPath } = require("./browserSession");
 
 const PORT = process.env.PORT || 3001;
 
-// Cloudflare's interstitial is the reason the size heuristic below is not
-// enough on its own. It arrives with HTTP 200, a text/html content type and
-// 28 KB of markup -- five times the threshold, and from the outside
+// Falls back to a fixed id when the header is missing, so an older client --
+// or a hand-written curl during debugging -- still works. Those callers share
+// one context, exactly as everything did before 02.10.2026.
+function searchIdOf(req) {
+  const raw = req.get("x-search-id");
+  if (typeof raw !== "string") return "default";
+  // The id travels into a Map key and into log lines; anything exotic is not
+  // ours. Keep it to what the adapters actually generate.
+  const clean = raw.trim().slice(0, 64);
+  return /^[A-Za-z0-9_-]+$/.test(clean) ? clean : "default";
+}
+
+// Cloudflare's interstitial is the reason a size heuristic is not enough on
+// its own. It arrives with HTTP 200, a text/html content type and 28 KB of
+// markup -- five times the threshold below, and from the outside
 // indistinguishable from a page with little on it. Only the content gives it
 // away.
 //
 // The title is proof by itself. The script host is only taken as proof
 // together with a smallish body, because a perfectly real page may embed a
-// Turnstile widget (a sign-in form, say) and must not be thrown away for it.
+// Turnstile widget (a sign-in form, say) and must not be flagged for it.
 const CHALLENGE_TITLE = /<title>\s*Just a moment/i;
 const CHALLENGE_HINTS = /challenges\.cloudflare\.com|cf-browser-verification|cf_chl_opt/i;
 
@@ -41,28 +60,17 @@ function bodyLooksLikeChallenge(body) {
   return body.length < 60000 && CHALLENGE_HINTS.test(body);
 }
 
-function looksLikeChallenge(result, isAjax) {
-  // 404 is a real answer, not a block: the page does not exist. Since
-  // 04.08.2026 the sidecar reports it that way itself when a navigation
-  // aborts with NS_BINDING_ABORTED -- the case with Boomkat when the
-  // keyword search returns a release link to a record that is not
-  // there. A retry with a fresh session would be pure waste of time here,
-  // the result would stay the same.
-  if (result.status === 404) return false;
-  // Any other HTTP error status is a generic blocked signal (e.g. Boomkat's
-  // HTTP 403 on TLS-/bot fingerprinting) -- independent of the endpoint
-  // type.
-  if (result.status >= 400) return true;
-  // Checked before the isAjax shortcut on purpose: a challenge served to a
-  // fetch() is still a challenge, and it carries HTTP 200.
-  if (bodyLooksLikeChallenge(result.body)) return true;
-  // AJAX/JSON responses may legitimately be short (e.g. 0 search hits) --
-  // no size check, otherwise false positives.
-  if (isAjax) return false;
+// Only for the log. Nothing branches on it any more.
+function describeBlock(result, isAjax) {
+  if (result.status === 404) return null; // a real answer: the page does not exist
+  if (result.status >= 400) return `HTTP ${result.status}`;
+  if (bodyLooksLikeChallenge(result.body)) return "Challenge-Seite";
+  if (isAjax) return null;
+  if (!result.contentType || !result.contentType.includes("text/html")) return "kein HTML";
   // According to RECON.md HHV's challenge page returns HTTP 200 with ~1.9 KB
-  // of obfuscated JS instead of real HTML -- good enough as a rough
-  // heuristic for full-navigation pages.
-  return !result.contentType || !result.contentType.includes("text/html") || result.body.length < 5000;
+  // of obfuscated JS instead of real HTML.
+  if (result.body.length < 5000) return `nur ${result.body.length} Bytes`;
+  return null;
 }
 
 const app = express();
@@ -72,7 +80,7 @@ const app = express();
 // interpret "__session/close" as a (nonsensical) shop path and pass it
 // through.
 app.post("/proxy/:shop/__session/close", async (req, res) => {
-  await invalidateSession(req.params.shop);
+  await closeSearch(req.params.shop, searchIdOf(req));
   res.status(204).end();
 });
 
@@ -88,22 +96,19 @@ app.all("/proxy/:shop/*", async (req, res) => {
   const upstreamPath = req.originalUrl.startsWith(proxyPrefix)
     ? req.originalUrl.slice(proxyPrefix.length)
     : req.originalUrl;
+  const searchId = searchIdOf(req);
   const isAjax = isAjaxPath(shop, upstreamPath);
   const fetchFn = isAjax ? fetchViaBrowser : navigateAndGetHtml;
 
   try {
-    let result = await fetchFn(shop, upstreamPath);
+    const result = await fetchFn(shop, upstreamPath, searchId);
     console.log(
       `[browser-sidecar][debug] ${shop} ${upstreamPath} -> status=${result.status} length=${result.body.length} contentType=${result.contentType}`
     );
 
-    if (looksLikeChallenge(result, isAjax)) {
-      console.log(`[browser-sidecar][debug] sieht wie Block/Challenge aus, Session-Retry für ${shop} ${upstreamPath}`);
-      await invalidateSession(shop);
-      result = await fetchFn(shop, upstreamPath);
-      console.log(
-        `[browser-sidecar][debug] Retry ${shop} ${upstreamPath} -> status=${result.status} length=${result.body.length}`
-      );
+    const block = describeBlock(result, isAjax);
+    if (block) {
+      console.log(`[browser-sidecar][debug] sieht nach Blockade aus (${block}) für ${shop} ${upstreamPath}`);
     }
 
     res.status(result.status);
