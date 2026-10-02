@@ -80,7 +80,9 @@ const app = express();
 // interpret "__session/close" as a (nonsensical) shop path and pass it
 // through.
 app.post("/proxy/:shop/__session/close", async (req, res) => {
-  await closeSearch(req.params.shop, searchIdOf(req));
+  const searchId = searchIdOf(req);
+  console.log(`[browser-sidecar][debug] ${req.params.shop} [${searchId}] Kontext geschlossen`);
+  await closeSearch(req.params.shop, searchId);
   res.status(204).end();
 });
 
@@ -102,20 +104,26 @@ app.all("/proxy/:shop/*", async (req, res) => {
 
   try {
     const result = await fetchFn(shop, upstreamPath, searchId);
+    // The search id belongs in the line: without it an isolation that is
+    // meant to keep two searches apart cannot be checked at all -- and a
+    // request whose header went missing shows up here as "default", sharing
+    // a context with everyone else.
     console.log(
-      `[browser-sidecar][debug] ${shop} ${upstreamPath} -> status=${result.status} length=${result.body.length} contentType=${result.contentType}`
+      `[browser-sidecar][debug] ${shop} [${searchId}] ${upstreamPath} -> status=${result.status} length=${result.body.length} contentType=${result.contentType}`
     );
 
     const block = describeBlock(result, isAjax);
     if (block) {
-      console.log(`[browser-sidecar][debug] sieht nach Blockade aus (${block}) für ${shop} ${upstreamPath}`);
+      console.log(
+        `[browser-sidecar][debug] sieht nach Blockade aus (${block}) für ${shop} [${searchId}] ${upstreamPath}`
+      );
     }
 
     res.status(result.status);
     res.set("content-type", result.contentType || "text/html");
     res.send(result.body);
   } catch (err) {
-    console.error(`[browser-sidecar] Fehler für ${shop} ${upstreamPath}:`, err);
+    console.error(`[browser-sidecar] Fehler für ${shop} [${searchId}] ${upstreamPath}:`, err);
     res.status(502).send("browser-sidecar: upstream error");
   }
 });

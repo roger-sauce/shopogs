@@ -128,7 +128,10 @@ async function startBrowser(shop) {
 
 async function getBrowser(shop) {
   const existing = browsers.get(shop);
-  if (existing && existing.browser.isConnected()) {
+  // `closing` is set by the sweeper before it awaits browser.close(). Without
+  // it, a request arriving in that window would be handed a browser that is
+  // already on its way out.
+  if (existing && !existing.closing && existing.browser.isConnected()) {
     existing.expiresAt = Date.now() + BROWSER_IDLE_TTL_MS;
     return existing.browser;
   }
@@ -140,6 +143,16 @@ async function getBrowser(shop) {
   const promise = startBrowser(shop).finally(() => browserStarts.delete(shop));
   browserStarts.set(shop, promise);
   return promise;
+}
+
+// A search that is still being set up lives in searchStarts, not yet in
+// searches -- and that gap was exactly wide enough for the sweeper to close a
+// browser out from under a starting search ("browserContext.newPage: Target
+// page, context or browser has been closed", observed 02.10.2026).
+function hasLiveWork(shop) {
+  if ([...searches.values()].some((s) => s.shop === shop)) return true;
+  const prefix = `${shop}\u0000`;
+  return [...searchStarts.keys()].some((key) => key.startsWith(prefix));
 }
 
 function touchBrowser(shop) {
@@ -199,21 +212,39 @@ async function gotoTolerant(page, url, beschreibung) {
   return "ok";
 }
 
+const GONE = /has been closed|Target page, context or browser/i;
+
 async function startSearch(shop, searchId) {
   const config = getShopConfig(shop);
-  const browser = await getBrowser(shop);
-  const context = await browser.newContext({ locale: config.locale });
-  const page = await context.newPage();
 
-  // Warm up: the context starts with no cookies at all, so the origin has to
-  // be visited once before any fetch() runs from inside the page.
-  await gotoTolerant(page, config.origin, `${shop} Startseite`);
-  await page.waitForTimeout(1000);
-  await acceptCookieBannerIfPresent(shop, page);
+  // Two attempts, because a browser can disappear between being handed over
+  // and being used -- the sweeper may have decided to close it, or the
+  // process died on its own. Starting a new one costs seconds; failing the
+  // search costs the user their answer.
+  for (let versuch = 1; ; versuch += 1) {
+    const browser = await getBrowser(shop);
+    try {
+      const context = await browser.newContext({ locale: config.locale });
+      const page = await context.newPage();
 
-  const search = { shop, context, page, expiresAt: Date.now() + SEARCH_IDLE_TTL_MS };
-  searches.set(searchKey(shop, searchId), search);
-  return search;
+      // Warm up: the context starts with no cookies at all, so the origin has
+      // to be visited once before any fetch() runs from inside the page.
+      await gotoTolerant(page, config.origin, `${shop} Startseite`);
+      await page.waitForTimeout(1000);
+      await acceptCookieBannerIfPresent(shop, page);
+
+      const search = { shop, context, page, expiresAt: Date.now() + SEARCH_IDLE_TTL_MS };
+      searches.set(searchKey(shop, searchId), search);
+      return search;
+    } catch (e) {
+      if (versuch >= 2 || !GONE.test(e.message)) throw e;
+      console.warn(
+        `[browser-sidecar] Browser für ${shop} war beim Kontextaufbau schon weg -- zweiter Versuch.`
+      );
+      const stale = browsers.get(shop);
+      if (stale && stale.browser === browser) browsers.delete(shop);
+    }
+  }
 }
 
 async function getSearch(shop, searchId) {
@@ -318,10 +349,18 @@ async function sweep() {
   }
 
   for (const [shop, entry] of [...browsers]) {
-    if (entry.expiresAt > now) continue;
-    if ([...searches.values()].some((s) => s.shop === shop)) continue;
-    console.log(`[browser-sidecar] Browser für ${shop} nach 30 Minuten Leerlauf beendet.`);
+    // Checked twice, and the second time with no await in between: closing the
+    // contexts above took time, and in it a search may have grabbed this very
+    // browser and refreshed its deadline.
+    if (entry.expiresAt > Date.now()) continue;
+    if (hasLiveWork(shop)) continue;
+    if (browsers.get(shop) !== entry) continue;
+
+    // From here on the entry counts as gone, even though close() is still
+    // running: getBrowser skips it and starts a fresh browser instead.
+    entry.closing = true;
     browsers.delete(shop);
+    console.log(`[browser-sidecar] Browser für ${shop} nach 30 Minuten Leerlauf beendet.`);
     try {
       await entry.browser.close();
     } catch (e) {
