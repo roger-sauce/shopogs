@@ -23,11 +23,29 @@ const { navigateAndGetHtml, fetchViaBrowser, invalidateSession, isAjaxPath } = r
 
 const PORT = process.env.PORT || 3001;
 
+// Cloudflare's interstitial is the reason the size heuristic below is not
+// enough on its own. It arrives with HTTP 200, a text/html content type and
+// 28 KB of markup -- five times the threshold, and from the outside
+// indistinguishable from a page with little on it. Only the content gives it
+// away.
+//
+// The title is proof by itself. The script host is only taken as proof
+// together with a smallish body, because a perfectly real page may embed a
+// Turnstile widget (a sign-in form, say) and must not be thrown away for it.
+const CHALLENGE_TITLE = /<title>\s*Just a moment/i;
+const CHALLENGE_HINTS = /challenges\.cloudflare\.com|cf-browser-verification|cf_chl_opt/i;
+
+function bodyLooksLikeChallenge(body) {
+  if (!body) return false;
+  if (CHALLENGE_TITLE.test(body)) return true;
+  return body.length < 60000 && CHALLENGE_HINTS.test(body);
+}
+
 function looksLikeChallenge(result, isAjax) {
   // 404 is a real answer, not a block: the page does not exist. Since
   // 04.08.2026 the sidecar reports it that way itself when a navigation
   // aborts with NS_BINDING_ABORTED -- the case with Boomkat when the
-  // autocomplete interface returns a product link to a record that is not
+  // keyword search returns a release link to a record that is not
   // there. A retry with a fresh session would be pure waste of time here,
   // the result would stay the same.
   if (result.status === 404) return false;
@@ -35,8 +53,11 @@ function looksLikeChallenge(result, isAjax) {
   // HTTP 403 on TLS-/bot fingerprinting) -- independent of the endpoint
   // type.
   if (result.status >= 400) return true;
-  // AJAX/JSON responses may legitimately be short (e.g. 0 autocomplete
-  // hits) -- no size check, otherwise false positives.
+  // Checked before the isAjax shortcut on purpose: a challenge served to a
+  // fetch() is still a challenge, and it carries HTTP 200.
+  if (bodyLooksLikeChallenge(result.body)) return true;
+  // AJAX/JSON responses may legitimately be short (e.g. 0 search hits) --
+  // no size check, otherwise false positives.
   if (isAjax) return false;
   // According to RECON.md HHV's challenge page returns HTTP 200 with ~1.9 KB
   // of obfuscated JS instead of real HTML -- good enough as a rough

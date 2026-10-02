@@ -41,16 +41,30 @@ const SHOP_CONFIG = {
     origin: "https://boomkat.com",
     locale: "en-GB",
     acceptButtonPattern: /accept|agree|got it/i,
-    // Keyword search -- the real page calls this via AJAX too, while you
-    // type into the search box.
+    // Boomkat is fetched in-page throughout, not navigated to.
     //
-    // Until the relaunch of October 2026 this was /api/autocomplete. The
-    // rename cost an afternoon, because the symptom pointed the wrong way:
-    // a path that is NOT listed here is fetched by full navigation, and a
-    // full document navigation to an API path is exactly what Cloudflare
-    // answers with its "Just a moment..." challenge. It looked like Boomkat
-    // had locked us out; in truth we were knocking on the wrong kind of door.
-    ajaxPathPrefixes: ["/api/search/keywords"],
+    // The keyword search is the obvious case -- the real page calls it that
+    // way while you type. The release, artist and label pages are the less
+    // obvious one, and it cost a round of debugging: a full navigation to
+    // any of them lands on Cloudflare's "Just a moment..." interstitial,
+    // which arrives with HTTP 200 and 28 KB of perfectly ordinary-looking
+    // HTML. The adapter then parses a challenge page and reports no
+    // releases, which from the outside is indistinguishable from a record
+    // the shop does not stock.
+    //
+    // Worse, the session is left standing ON that interstitial, so the next
+    // fetch() runs from the wrong page and earns a 403 of its own. That was
+    // the asymmetry in the logs: the same search found ML Buch (artist page
+    // useless, keyword search still fine) and lost IVM Trio (artist page
+    // useless, keyword search poisoned by it).
+    //
+    // A fetch() from the warm start page is answered in full -- verified
+    // against the live site: 295 KB for /artists/burial, where the
+    // navigation returned 28 KB of challenge.
+    //
+    // HHV is deliberately NOT like this: its challenge is only resolved BY
+    // a real navigation (see the note at the top of this file).
+    ajaxPathPrefixes: ["/api/search/keywords", "/artists/", "/labels/"],
   },
 };
 
