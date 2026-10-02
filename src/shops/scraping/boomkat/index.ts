@@ -38,37 +38,45 @@ const boomkat: ShopAdapter = {
       if (!artistNeedle && !titleNeedle) return [];
 
       const query = [artistNeedle, titleNeedle].filter(Boolean).join(" ");
+      // The keyword search is the first and, in practice, the only way in.
+      //
+      // The artist overview page would be the richer source -- it lists a
+      // catalogue in full, where the search answers with five ranked rows --
+      // and it used to be asked first for exactly that reason. Measured
+      // against the live shop in October 2026, it is simply not available to
+      // us any more: /artists/<slug> answers 403 to the sidecar, on the
+      // retry as well, while /labels/<slug> and the release pages come
+      // through untouched. Boomkat evidently guards its artist listings
+      // harder than the rest.
+      //
+      // Asking it first therefore burned two doomed requests before every
+      // single search -- slower, and precisely the kind of load that invites
+      // the throttling we then blamed on something else.
       let releaseMatches: BoomkatReleaseEntry[] = [];
 
-      // With an artist to go on, the artist overview page is the better
-      // source and it is tried first -- for both kinds of search, not just
-      // the artist-only one as before.
-      //
-      // The keyword search answers with five rows, ranked by its own idea of
-      // relevance, and a record that is in the shop can simply fall off that
-      // list (observed: "Sees" was found through the title but not through
-      // the artist name). /artists/<slug> lists the catalogue in full and
-      // costs exactly one request either way.
-      if (artistNeedle) {
+      try {
+        const hits = parseBoomkatKeywordResults(await searchBoomkatKeywords(query));
+        releaseMatches = hits.filter((hit) =>
+          matchesQueryWords(`${hit.artist} ${hit.title}`, query)
+        );
+      } catch (err) {
+        console.warn(`[boomkat] Stichwortsuche fehlgeschlagen:`, err);
+      }
+
+      // Kept as a last resort rather than deleted. It costs nothing while
+      // the search delivers, it is the better source should Boomkat ever
+      // relax that rule, and it still answers the case the search is known
+      // to be weak at: a title the ranking drops (observed: "Sees" was found
+      // through the title but not through the artist name).
+      if (releaseMatches.length === 0 && artistNeedle) {
         try {
           const html = await fetchBoomkatArtistPage(slugifyArtist(artistNeedle));
           releaseMatches = parseBoomkatArtistPage(html).filter((entry) =>
             matchesQueryWords(`${entry.artist} ${entry.title}`, query)
           );
         } catch (err) {
-          console.warn(`[boomkat] Artist-Seite fehlgeschlagen, Fallback auf Stichwortsuche:`, err);
+          console.warn(`[boomkat] Artist-Seite fehlgeschlagen:`, err);
         }
-      }
-
-      // No artist, an unknown slug, or nothing on the page that matches the
-      // title: ask the search. It returns artists, releases and a link to
-      // the full search page all mixed together; the parser keeps the
-      // releases.
-      if (releaseMatches.length === 0) {
-        const hits = parseBoomkatKeywordResults(await searchBoomkatKeywords(query));
-        releaseMatches = hits.filter((hit) =>
-          matchesQueryWords(`${hit.artist} ${hit.title}`, query)
-        );
       }
 
       const results = await Promise.all(
