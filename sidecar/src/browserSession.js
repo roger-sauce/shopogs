@@ -120,7 +120,26 @@ async function startBrowser(shop) {
   // then catches a half-finished directory ("manifest.json is missing"). We
   // do not need ad blocking (we do want the full page content), therefore
   // switch it off completely instead of merely defusing the race condition.
-  const browser = await Camoufox({ headless: true, locale: config.locale, exclude_addons: ["UBO"] });
+  //
+  // geoip: Camoufox fragt die oeffentliche IP ab und stellt Zeitzone,
+  // Geolocation und die WebRTC-IP passend dazu ein. Ohne das blieb Boomkat ab
+  // November 2026 auf JEDER Seite in Cloudflares "Just a moment..." haengen --
+  // auch die Startseite, auch mit virtuellem Bildschirm, auch mit von Hand
+  // gesetzter Zeitzone. Mit geoip kam dieselbe v135 am 01.11.2026 sofort durch.
+  // Die Version war es also nicht, sondern ein Fingerabdruck, der nicht zur IP
+  // passte. Kostet beim Browserstart einen Abruf bei ipify & Co. (antwortet
+  // keiner davon, startet der Browser nicht). Die GeoIP-Datenbank liegt seit
+  // dem Dockerfile unter /opt/camoufox/GeoLite2-City.mmdb.
+  //
+  // locale bleibt gesetzt (HHV erkennt seinen Cookie-Banner an /akzeptieren/).
+  // Der erfolgreiche Test lief allerdings OHNE locale -- haengt Boomkat damit
+  // wieder, ist das der naechste Verdaechtige.
+  const browser = await Camoufox({
+    headless: true,
+    geoip: true,
+    locale: config.locale,
+    exclude_addons: ["UBO"],
+  });
   browsers.set(shop, { browser, expiresAt: Date.now() + BROWSER_IDLE_TTL_MS });
   console.log(`[browser-sidecar] Browser für ${shop} gestartet.`);
   return browser;

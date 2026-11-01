@@ -72,6 +72,13 @@ USER pwuser
 
 COPY --chown=pwuser:pwuser scripts/install-camoufox.js ./scripts/install-camoufox.js
 RUN node scripts/install-camoufox.js
+# GeoIP database for geoip: true (browserSession.js) -- without it Camoufox
+# would download 50 MB at the first browser start of every new container.
+# Called directly rather than via `npx camoufox-js fetch`, which would also
+# "update" the pinned browser, see below. Not pinned: always the newest
+# release of P3TERX/GeoLite.mmdb -- location data, accepted knowingly.
+RUN node -e 'import("camoufox-js/dist/locale.js").then((m) => m.downloadMMDB())' \
+ && test -s /opt/camoufox/GeoLite2-City.mmdb
 # camoufox-js' own installer does a `chmod -R 755` after unpacking
 # -- our manual script (only AdmZip extractAllTo) does not, hence
 # EACCES when starting camoufox-bin without this step.
@@ -79,8 +86,8 @@ RUN chmod -R 755 /opt/camoufox
 # No more `npx camoufox-js fetch` afterwards: the command compares the
 # installed against the "newest" version and updates unasked -- that is
 # exactly what just overwrote our manually installed, working
-# v135.0.1-beta.24 with the broken "newest" v152 again. We do not need GeoIP
-# (our code never sets `geoip: true`), addons come if necessary straight from
+# v135.0.1-beta.24 with the broken "newest" v152 again. GeoIP is fetched
+# separately above (geoip: true since 01.11.2026), addons come if necessary straight from
 # the npm package itself -- if that is missing, we will see it in the next
 # test as a clear new error.
 COPY --chown=pwuser:pwuser src ./src
