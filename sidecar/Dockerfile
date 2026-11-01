@@ -91,6 +91,11 @@ COPY --chown=pwuser:pwuser src ./src
 # 3.0.2-0ubuntu1.23 -> .25. The base image is only rebuilt when Microsoft
 # feels like it, so we fetch it ourselves.
 #
+# libbrotli1: same reasoning for CVE-2026-111497 (Brotli decoder, CISA KEV
+# since 27.10.2026), 1.0.9-2build6 -> 1.0.9-2ubuntu0.1. NOT covered by this:
+# the Brotli copy inside Camoufox/Firefox under /opt/camoufox, which decodes
+# the shop pages -- Trivy is blind to it, it waits for a Camoufox release.
+#
 # npm: needed for the `npm ci` above, called by nothing at runtime (see CMD).
 # Ten of this image's nineteen findings sat in its bundled dependencies,
 # including the one CRITICAL. Both known layouts are listed -- Debian-based
@@ -103,7 +108,7 @@ COPY --chown=pwuser:pwuser src ./src
 # image; what goes away is the executable code and with it the finding.
 USER root
 RUN apt-get update \
- && apt-get install -y --no-install-recommends libssl3 \
+ && apt-get install -y --no-install-recommends libssl3 libbrotli1 \
  && rm -rf /var/lib/apt/lists/* \
  && rm -rf /usr/lib/node_modules/npm /usr/local/lib/node_modules/npm \
            /usr/bin/npm /usr/bin/npx /usr/local/bin/npm /usr/local/bin/npx \
