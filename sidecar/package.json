@@ -7,6 +7,17 @@
   "scripts": {
     "start": "node src/server.js"
   },
+  "//camoufox-js": [
+    "Pinned to an exact version on purpose, NOT a range. 0.11.2 ships a",
+    "fingerprint generator that sets an audio:seed property our pinned",
+    "browser build (v135.0.1-beta.24, see scripts/install-camoufox.js) does",
+    "not know, and every session creation dies with UnknownProperty.",
+    "On 02.11.2026 an `npm update` rewrote this pin to \"^0.8.2\" -- three",
+    "minor versions BACKWARDS -- and committed a lockfile to match, which",
+    "then broke `npm ci` in the image build against the still-pinned",
+    "package.json. npm may rewrite ranges in package.json; after every",
+    "update read `git diff package.json` before committing."
+  ],
   "dependencies": {
     "adm-zip": "^0.6.0",
     "camoufox-js": "0.11.1",
