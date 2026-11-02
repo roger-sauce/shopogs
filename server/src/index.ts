@@ -7,6 +7,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 
 import { shops } from "../../src/shops/index.ts";
 import { sanitizeSearchTerm } from "../../src/lib/inputValidation.ts";
+import { withoutBracketed } from "../../src/lib/withoutBracketed.ts";
 import { fetchTitleSuggestions } from "../../src/lib/titleSuggestions.ts";
 import { SELECTABLE_FORMATS } from "../../src/lib/classifyFormat.ts";
 import type {
@@ -187,8 +188,12 @@ app.get("/api/search", async (req: Request, res: Response) => {
   const results: ShopSearchEntry[] = await Promise.all(
     targets.map(async (shop) => {
       try {
+        // Brackets are dropped on the way OUT, not on the way back: a
+        // decoration like "(LP)" makes some shop searches return nothing at
+        // all, and what never arrives cannot be filtered (see
+        // src/lib/withoutBracketed.ts).
         const found = await withTimeout(
-          shop.checkAvailability(artist.trim(), title.trim()),
+          shop.checkAvailability(withoutBracketed(artist), withoutBracketed(title)),
           TIMEOUT_MS[speed],
           shop.name
         );
@@ -255,7 +260,11 @@ app.get("/api/label", async (req: Request, res: Response) => {
  * something insists on a carrier a record actually comes on.
  */
 app.get("/api/suggest", async (req: Request, res: Response) => {
-  const query = sanitizeSearchTerm(firstValue(req.query.q)).trim();
+  // Same reasoning as in /api/search -- and with more at stake here, because
+  // these suggestions are what put a bracket into the next query to begin
+  // with: SoundOhm lists a record as "Late Loop (LP)", and taking that
+  // suggestion used to make Boomkat blind to it.
+  const query = withoutBracketed(sanitizeSearchTerm(firstValue(req.query.q)));
   if (query.length < 3) {
     res.json({ suggestions: [] });
     return;

@@ -12,6 +12,7 @@ import { matchesFormatFilter, SELECTABLE_FORMATS } from "./lib/classifyFormat";
 import { fetchTitleSuggestions, type TitleSuggestion } from "./lib/titleSuggestions";
 import { STATUS_COLORS, STATUS_LABELS } from "./lib/availabilityStatus";
 import { sanitizeSearchTerm } from "./lib/inputValidation";
+import { withoutBracketed } from "./lib/withoutBracketed";
 
 const GROUP_LABELS: Record<ShopGroup, string> = {
   "pickup-berlin": "Pickup in Berlin",
@@ -327,7 +328,14 @@ export default function App() {
     await Promise.all(
       targets.map(async (shop) => {
         try {
-          const results = await shop.checkAvailability(artistVal.trim(), titleVal.trim());
+          // Brackets are dropped on the way OUT, not on the way back: a
+          // decoration like "(LP)" makes some shop searches return nothing at
+          // all, and what never arrives cannot be filtered (see
+          // src/lib/withoutBracketed.ts).
+          const results = await shop.checkAvailability(
+            withoutBracketed(artistVal),
+            withoutBracketed(titleVal)
+          );
           setShopResults((prev) =>
             prev.map((r) => (r.shop.id === shop.id ? { ...r, status: "done", results } : r))
           );
